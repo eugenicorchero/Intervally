@@ -6,8 +6,8 @@
     <title>Intervally - Entrenador Visual d'Intervals Musicals</title>
     <!-- Càrrega de Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Càrrega de VexFlow -->
-    <script src="https://cdn.jsdelivr.net/npm/vexflow@4.2.3/build/vexflow.js"></script>
+    <!-- Càrrega de VexFlow amb 'defer' per a una càrrega més ordenada -->
+    <script src="https://cdn.jsdelivr.net/npm/vexflow@4.2.3/build/vexflow.js" defer></script>
     <style>
         /* Estils Base i Rendiment */
         body {
@@ -49,6 +49,9 @@
             width: 100%;
             height: 100%;
         }
+        #vexflow-error-message {
+            min-height: 150px;
+        }
     </style>
 </head>
 <body class="p-4 sm:p-6 flex flex-col items-center">
@@ -62,6 +65,17 @@
             <p class="text-gray-400 mt-1">Entrenador Visual d'Intervals Musicals</p>
         </header>
 
+        <!-- PANTALLA D'ERROR DE LLIBRERIA (MOSTRADA NOMÉS SI FALLA LA CÀRREGA) -->
+        <section id="vexflow-error-message" class="hidden text-center p-8 bg-red-900 border-red-500 border-2 rounded-xl shadow-2xl">
+            <h2 class="text-3xl font-bold mb-4 text-red-300">⚠️ Error de Càrrega de VexFlow</h2>
+            <p class="text-red-100 mb-6">No hem pogut carregar correctament la llibreria de notació musical VexFlow. Si us plau, recarregueu la pàgina. Això pot ser causat per una connexió a Internet lenta o un error temporal del CDN.</p>
+            <button onclick="window.location.reload()"
+                class="p-4 bg-red-600 hover:bg-red-500 text-white font-semibold rounded-lg transition duration-300 transform hover:scale-[1.02]">
+                Recarregar Pàgina
+            </button>
+        </section>
+
+
         <!-- PANTALLA INICIAL -->
         <section id="start-screen" class="text-center p-8 bg-gray-800 rounded-xl shadow-2xl transition duration-500">
             <h2 class="text-3xl font-bold mb-6 text-white">Benvingut/da! Tria el teu Nivell de Pràctica</h2>
@@ -70,17 +84,17 @@
                 Recorda que tens 30 segons per a cada resposta.
             </p>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <button onclick="IntervallyApp.startGame('inicial')"
+                <button id="btn-inicial" onclick="IntervallyApp.startGame('inicial')"
                     class="p-6 bg-blue-700 hover:bg-blue-600 text-white font-semibold rounded-lg shadow-lg transition duration-300 transform hover:scale-[1.02] interval-button">
                     <span class="text-2xl block">Inicial</span>
                     <span class="text-sm opacity-75 mt-1 block">(Només ascendent: Uníson, 2a M, 3a M, 4a J, 5a J, 6a M, 7a M)</span>
                 </button>
-                <button onclick="IntervallyApp.startGame('intermedio')"
+                <button id="btn-intermedio" onclick="IntervallyApp.startGame('intermedio')"
                     class="p-6 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-lg shadow-lg transition duration-300 transform hover:scale-[1.02] interval-button">
                     <span class="text-2xl block">Intermedi</span>
                     <span class="text-sm opacity-75 mt-1 block">(Només ascendent: Tots els 13 intervals)</span>
                 </button>
-                <button onclick="IntervallyApp.startGame('dificil')"
+                <button id="btn-dificil" onclick="IntervallyApp.startGame('dificil')"
                     class="p-6 bg-blue-500 hover:bg-blue-400 text-white font-semibold rounded-lg shadow-lg transition duration-300 transform hover:scale-[1.02] interval-button">
                     <span class="text-2xl block">Difícil</span>
                     <span class="text-sm opacity-75 mt-1 block">(Ascendent/Descendent: Tots els 13 intervals)</span>
@@ -191,6 +205,10 @@
         const PITCH_RANGE_MIDI_MIN = 57 - 12; // A2 (una octava sota el mínim central)
         const PITCH_RANGE_MIDI_MAX = 81 + 12; // A6 (una octava sobre el màxim central)
 
+        // Polling constants for VexFlow loading
+        const MAX_POLLING_ATTEMPTS = 50; // Check up to 5 seconds (50 * 100ms)
+        const POLLING_INTERVAL = 100; // Check every 100 milliseconds
+
         // Estat central de l'aplicació
         const AppState = {
             difficulty: null,
@@ -204,12 +222,14 @@
             isChecking: false,
             totalAttempts: 0,
             correctAnswers: 0,
+            isVexFlowReady: false, // Estat per la comprovació de càrrega
         };
 
         // Cache d'elements del DOM per millorar el rendiment de les cerques
         const DOM = {};
 
         function cacheDOMElements() {
+            DOM.vexflowError = document.getElementById('vexflow-error-message');
             DOM.startScreen = document.getElementById('start-screen');
             DOM.gameScreen = document.getElementById('game-screen');
             DOM.difficultyDisplay = document.getElementById('current-difficulty');
@@ -226,8 +246,27 @@
             DOM.scoreTotal = document.getElementById('score-total');
         }
 
+        /** Oculta o mostra la pantalla d'error i inhabilita els botons de nivell */
+        function toggleVexFlowError(show) {
+            if (show) {
+                DOM.vexflowError.classList.remove('hidden');
+                DOM.startScreen.classList.add('hidden');
+                // Deshabilita els botons per evitar cridar startGame sense la llibreria
+                document.getElementById('btn-inicial').disabled = true;
+                document.getElementById('btn-intermedio').disabled = true;
+                document.getElementById('btn-dificil').disabled = true;
+            } else {
+                DOM.vexflowError.classList.add('hidden');
+                DOM.startScreen.classList.remove('hidden');
+                document.getElementById('btn-inicial').disabled = false;
+                document.getElementById('btn-intermedio').disabled = false;
+                document.getElementById('btn-dificil').disabled = false;
+            }
+        }
+
+
         // =========================================================================
-        // 2. FUNCIONS DE VEXFLOW I UTILITAT MUSICAL (COMPROVACIÓ SEGONS DOCS VEXFLOW)
+        // 2. FUNCIONS DE VEXFLOW I UTILITAT MUSICAL
         // =========================================================================
 
         /** Converteix una nota MIDI al seu format VexFlow (p. ex., 'C#/4') */
@@ -250,23 +289,22 @@
             const container = DOM.staveDisplayContainer;
             if (!container) return;
 
-            // 1. Comprovació d'existència de VexFlow i assignació de l'espai de noms (VF)
-            if (typeof Vex === 'undefined' || !Vex.Flow) {
-                 container.innerHTML = `<p class="text-red-500 text-center pt-8">Error: La llibreria musical VexFlow no s'ha carregat correctament.</p>`;
-                 console.error("VexFlow no está definido. Comprova la càrrega del script.");
+            // Comprovació final
+            if (!AppState.isVexFlowReady) {
+                 container.innerHTML = `<p class="text-red-500 text-center pt-8">Error intern: VexFlow no preparat.</p>`;
                  return;
             }
             const VF = Vex.Flow;
 
-            // 2. Neteja del contenidor anterior
+            // 1. Neteja del contenidor anterior
             container.innerHTML = ''; 
 
-            // 3. Determinar mides (fa que el pentagrama sigui responsive)
+            // 2. Determinar mides
             const width = Math.min(DOM.staveContainer.clientWidth - 32 || 600, 800); 
             const height = 150;
 
             try {
-                // 4. Inicialitzar Factory (Patró recomanat per VexFlow)
+                // 3. Inicialitzar Factory (Patró recomanat per VexFlow)
                 const factory = new VF.Factory({ 
                     renderer: { 
                         elementId: 'stave-display', 
@@ -280,15 +318,14 @@
                 const note1Key = note1VF.key;
                 const note2Key = note2VF.key;
                 
-                // 5. Crear Veu i Notes amb EasyScore (sempre en clau de Sol)
+                // 4. Crear Veu i Notes amb EasyScore (sempre en clau de Sol)
                 const voice = score.voice(score.notes(`${note1Key}/q, ${note2Key}/q`, { clef: 'treble' }));
 
-                // 6. Afegir accidentals manualment si cal (Utilitzant VF.Accidental)
-                // Es fa sobre els 'Tickables' per assegurar-ne la correcta col·locació.
+                // 5. Afegir accidentals manualment si cal (Utilitzant VF.Accidental)
                 if (note1VF.accidental) voice.getTickables()[0].addAccidental(0, new VF.Accidental(note1VF.accidental));
                 if (note2VF.accidental) voice.getTickables()[1].addAccidental(0, new VF.Accidental(note2VF.accidental));
 
-                // 7. Configurar i Dibuixar el Pentagrama (Stave)
+                // 6. Configurar i Dibuixar el Pentagrama (Stave)
                 system.addStave({
                     voices: [voice],
                 }).addClef('treble').addTimeSignature('4/4');
@@ -329,6 +366,12 @@
 
         /** Inicia el joc */
         function startGame(difficultyKey) {
+            if (!AppState.isVexFlowReady) {
+                 console.error("No es pot iniciar el joc: VexFlow no està preparat.");
+                 toggleVexFlowError(true);
+                 return;
+            }
+            
             AppState.difficulty = difficultyKey;
             AppState.totalAttempts = 0; // Reinicia puntuació
             AppState.correctAnswers = 0; // Reinicia puntuació
@@ -667,13 +710,33 @@
         };
 
         // =========================================================================
-        // 6. INICIALITZACIÓ
+        // 6. INICIALITZACIÓ SEGURA (VEXFLOW AMB POLLING)
         // =========================================================================
 
-        window.onload = () => {
+        function initializeApp() {
             cacheDOMElements(); // Càrrega d'elements del DOM una sola vegada
-            switchView('start');
-        };
+            let attempts = 0;
+
+            const checkVexFlow = setInterval(() => {
+                // Polling: Comprova si l'objecte Vex (llibreria VexFlow) existeix
+                if (typeof Vex !== 'undefined' && Vex.Flow) {
+                    clearInterval(checkVexFlow);
+                    AppState.isVexFlowReady = true;
+                    toggleVexFlowError(false);
+                    switchView('start');
+                    console.log("VexFlow carregat correctament.");
+                } else if (attempts >= MAX_POLLING_ATTEMPTS) {
+                    // Si se supera el límit d'intents (5 segons)
+                    clearInterval(checkVexFlow);
+                    AppState.isVexFlowReady = false;
+                    console.error("VexFlow no es troba definit. S'ha superat el temps d'espera.");
+                    toggleVexFlowError(true);
+                }
+                attempts++;
+            }, POLLING_INTERVAL);
+        }
+        
+        window.onload = initializeApp;
     </script>
 </body>
 </html>
