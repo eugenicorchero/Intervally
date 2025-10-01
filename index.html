@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Intervally - Aprèn Intervals Musicals</title>
+    <!-- Càrrega de Tailwind CSS per a un disseny elegant i responsiu -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Càrrega de VexFlow per a la notació musical -->
+    <script src="https://cdn.jsdelivr.net/npm/vexflow@4.2.3/build/vexflow.js"></script>
+    <style>
+        /* Configuració global de la font i fons fosc */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0d1117; /* Fons fosc */
+            color: #e5e7eb; /* Text clar */
+        }
+        /* Estil per als botons d'interval */
+        .interval-button {
+            transition: all 0.1s ease;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.06);
+        }
+        .interval-button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(37, 99, 235, 0.2), 0 4px 6px -4px rgba(37, 99, 235, 0.1);
+        }
+        /* Estils de temporitzador (es controlen amb JS i classes de Tailwind) */
+        .timer-display {
+            font-size: 1.5rem;
+            font-weight: bold;
+            transition: color 0.5s ease;
+        }
+        /* Classe per deshabilitar botons de direcció */
+        .direction-disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body class="min-h-screen p-4 sm:p-6 flex flex-col items-center">
+
+    <!-- Contenidor Principal Centrat -->
+    <main class="w-full max-w-5xl">
+
+        <!-- Capçalera -->
+        <header class="text-center mb-8 border-b border-blue-800 pb-4">
+            <h1 class="text-4xl sm:text-5xl font-extrabold text-blue-400 tracking-tight">Intervally</h1>
+            <p class="text-gray-400 mt-1">Entrenador Visual d'Intervals Musicals</p>
+        </header>
+
+        <!-- PANTALLA INICIAL -->
+        <section id="start-screen" class="text-center p-8 bg-gray-800 rounded-xl shadow-2xl transition duration-500">
+            <h2 class="text-3xl font-bold mb-6 text-white">Benvingut/da! Tria el teu Nivell de Pràctica</h2>
+            <p class="text-gray-300 mb-10 max-w-2xl mx-auto">
+                Practica la identificació d'intervals musicals de forma visual. Selecciona un nivell de dificultat per començar.
+                Recorda que tens 30 segons per a cada resposta. Molta sort!
+            </p>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <button onclick="IntervallyApp.startGame('inicial')"
+                    class="p-6 bg-blue-700 hover:bg-blue-600 text-white font-semibold rounded-lg shadow-lg transition duration-300 transform hover:scale-[1.02] interval-button">
+                    <span class="text-2xl block">Inicial</span>
+                    <span class="text-sm opacity-75 mt-1 block">(Només ascendent: Uníson, 2a M, 3a M, 4a J, 5a J, 6a M, 7a M)</span>
+                </button>
+                <button onclick="IntervallyApp.startGame('intermedio')"
+                    class="p-6 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-lg shadow-lg transition duration-300 transform hover:scale-[1.02] interval-button">
+                    <span class="text-2xl block">Intermedi</span>
+                    <span class="text-sm opacity-75 mt-1 block">(Només ascendent: Tots els 13 intervals)</span>
+                </button>
+                <button onclick="IntervallyApp.startGame('dificil')"
+                    class="p-6 bg-blue-500 hover:bg-blue-400 text-white font-semibold rounded-lg shadow-lg transition duration-300 transform hover:scale-[1.02] interval-button">
+                    <span class="text-2xl block">Difícil</span>
+                    <span class="text-sm opacity-75 mt-1 block">(Ascendent/Descendent: Tots els 13 intervals)</span>
+                </button>
+            </div>
+        </section>
+
+        <!-- PANTALLA DE PRÀCTICA -->
+        <section id="game-screen" class="hidden flex flex-col space-y-6 p-4">
+
+            <!-- Display del Temporitzador i Dificultat -->
+            <div class="flex justify-between items-center px-2 py-3 bg-gray-800 rounded-lg shadow-inner">
+                <div class="text-lg text-gray-400">Dificultat: <span id="current-difficulty" class="font-semibold text-blue-300"></span></div>
+                <div class="timer-display text-green-500" id="timer-display">30</div>
+            </div>
+
+            <!-- Display de VexFlow (Pentagrama) -->
+            <div id="stave-container" class="bg-white p-4 rounded-lg shadow-xl border border-gray-700">
+                <!-- VexFlow dibuixarà en aquest div -->
+                <div id="stave-display"></div>
+            </div>
+
+            <!-- Controls de Resposta -->
+            <div class="space-y-4">
+                <h3 class="text-xl font-semibold text-white border-b border-gray-700 pb-2">Selecciona la Resposta</h3>
+
+                <!-- Botons d'Interval (13) -->
+                <div id="interval-buttons-container" class="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7 gap-3">
+                    <!-- Els botons es generaran amb JS -->
+                </div>
+
+                <!-- Botons de Direcció (Ascendent/Descendent) -->
+                <div class="flex justify-center space-x-4 p-3 bg-gray-800 rounded-lg">
+                    <button id="btn-ascendente" onclick="IntervallyApp.selectDirection('ascendente')"
+                        class="interval-button p-3 w-1/2 rounded-lg font-semibold bg-gray-600 hover:bg-gray-500 text-white border-2 border-transparent focus:border-blue-400 transition duration-150">
+                        Ascendent
+                    </button>
+                    <button id="btn-descendente" onclick="IntervallyApp.selectDirection('descendente')"
+                        class="interval-button p-3 w-1/2 rounded-lg font-semibold bg-gray-600 hover:bg-gray-500 text-white border-2 border-transparent focus:border-blue-400 transition duration-150">
+                        Descendent
+                    </button>
+                </div>
+
+                <!-- Missatge de Feedback -->
+                <div id="feedback-message" class="text-center h-8 font-bold text-lg"></div>
+
+                <!-- Botons de Control (Comprovar i Següent) -->
+                <div class="flex justify-center space-x-4 pt-4 border-t border-gray-700">
+                    <button id="btn-check" onclick="IntervallyApp.checkAnswer()" disabled
+                        class="p-4 rounded-lg font-bold w-1/2 bg-blue-700 hover:bg-blue-600 text-white disabled:bg-gray-500 disabled:cursor-not-allowed transition duration-150">
+                        Comprova
+                    </button>
+                    <button id="btn-next" onclick="IntervallyApp.nextInterval()" disabled
+                        class="p-4 rounded-lg font-bold w-1/2 bg-gray-600 hover:bg-500 text-white disabled:opacity-50 disabled:cursor-not-allowed transition duration-150">
+                        Següent Interval
+                    </button>
+                </div>
+            </div>
+
+        </section>
+    </main>
+
+    <script>
+        // =========================================================================
+        // 1. CONFIGURACIÓ I ESTAT GLOBAL (Traduït a Català els noms d'intervals i dificultats)
+        // =========================================================================
+
+        const INTERVAL_MAP = [
+            { semitones: 0, name: 'Uníson', btnName: 'Uníson' },
+            { semitones: 1, name: '2a menor', btnName: '2a m' },
+            { semitones: 2, name: '2a major', btnName: '2a M' },
+            { semitones: 3, name: '3a menor', btnName: '3a m' },
+            { semitones: 4, name: '3a major', btnName: '3a M' },
+            { semitones: 5, name: '4a Justa', btnName: '4a J' },
+            { semitones: 6, name: 'Tritó', btnName: 'Tritó' }, // A4 / d5
+            { semitones: 7, name: '5a Justa', btnName: '5a J' },
+            { semitones: 8, name: '6a menor', btnName: '6a m' },
+            { semitones: 9, name: '6a major', btnName: '6a M' },
+            { semitones: 10, name: '7a menor', btnName: '7a m' },
+            { semitones: 11, name: '7a major', btnName: '7a M' },
+            { semitones: 12, name: '8a Justa', btnName: '8a J' },
+        ];
+
+        const DIFFICULTY_CONFIG = {
+            'inicial': {
+                semitones: [0, 2, 4, 5, 7, 9, 11], // Unison, M2, M3, P4, P5, M6, M7
+                directions: ['ascendente'],
+                name: 'Inicial',
+            },
+            'intermedio': {
+                semitones: INTERVAL_MAP.map(i => i.semitones), // All 13 intervals
+                directions: ['ascendente'],
+                name: 'Intermedi',
+            },
+            'dificil': {
+                semitones: INTERVAL_MAP.map(i => i.semitones), // All 13 intervals
+                directions: ['ascendente', 'descendente'],
+                name: 'Difícil',
+            }
+        };
+
+        const NOTES_SEMITONE_MAP = {
+            'C': 0, 'C#': 1, 'Db': 1, 'D': 2, 'D#': 3, 'Eb': 3, 'E': 4, 'F': 5, 'F#': 6, 'Gb': 6,
+            'G': 7, 'G#': 8, 'Ab': 8, 'A': 9, 'A#': 10, 'Bb': 10, 'B': 11
+        };
+
+        const SEMITONE_NOTE_MAP = [
+            'C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'
+        ];
+
+        // Rango permitido (A3 a A5) para la nota inicial
+        const MIN_NOTE_MIDI = 57; // A3 MIDI number
+        const MAX_NOTE_MIDI = 81; // A5 MIDI number
+
+        // Estado central de la aplicación
+        const AppState = {
+            view: 'start',
+            difficulty: null,
+            currentIntervalSemitones: null,
+            currentDirection: null,
+            startNoteMIDI: null,
+            endNoteMIDI: null,
+            selectedInterval: null,
+            selectedDirection: 'ascendente',
+            timer: 30,
+            timerId: null,
+            isChecking: false, // Previene doble chequeo
+        };
+
+        // =========================================================================
+        // 2. FUNCIONES DE UTILIDAD MUSICAL Y DE VEXFLOW (sense canvis de lògica)
+        // =========================================================================
+
+        /** Convierte una nota MIDI (0-127) a su formato VexFlow (e.g., 'C#/4') */
+        function midiToVexFlow(midiNote) {
+            const octave = Math.floor(midiNote / 12) - 1;
+            const semi = midiNote % 12;
+            let noteName = SEMITONE_NOTE_MAP[semi];
+            let accidental = '';
+
+            if (noteName.length > 1) { // Si tiene #
+                accidental = noteName.substring(1);
+                noteName = noteName.substring(0, 1);
+            }
+
+            return { key: `${noteName}/${octave}`, accidental: accidental };
+        }
+
+        /** Genera una nota inicial aleatoria válida dentro del rango A3-A5 */
+        function getRandomStartNoteMIDI() {
+            return Math.floor(Math.random() * (MAX_NOTE_MIDI - MIN_NOTE_MIDI + 1)) + MIN_NOTE_MIDI;
+        }
+
+        /** Dibuja el pentagrama y las notas usando VexFlow */
+        function drawInterval(note1VF, note2VF) {
+            const container = document.getElementById('stave-display');
+            container.innerHTML = ''; // Limpiar el contenedor anterior
+
+            // Configuración del ancho del pentagrama basada en el tamaño de la pantalla
+            const width = Math.min(container.clientWidth || 600, 800);
+            const height = 150;
+
+            // Uso de la ruta completa Vex.Flow.Factory per evitar ReferenceError
+            const factory = new Vex.Flow.Factory({ renderer: { elementId: 'stave-display', width: width, height: height } });
+            const score = factory.EasyScore();
+            const system = factory.System();
+
+            // Crea las claves VexFlow.
+            const note1Key = note1VF.key;
+            const note2Key = note2VF.key;
+            
+            // Manejo de Accidentales
+            const accidental1 = note1VF.accidental;
+            const accidental2 = note2VF.accidental;
+
+            // Se dibuja la primera nota (base) y la segunda nota (intervalo) como dos notas consecutivas
+            const voice = score.voice(score.notes(`${note1Key}/q, ${note2Key}/q`, { clef: 'treble' }));
+
+            // Añadir accidentales si existen (VexFlow maneja el formato de la clave automáticamente)
+            if (accidental1) voice.getTickables()[0].addAccidental(0, new Vex.Flow.Accidental(accidental1));
+            if (accidental2) voice.getTickables()[1].addAccidental(0, new Vex.Flow.Accidental(accidental2));
+
+            system.addStave({
+                voices: [voice],
+            }).addClef('treble').addTimeSignature('4/4');
+
+            factory.draw();
+        }
+
+
+        // =========================================================================
+        // 3. LÒGICA DE JOC
+        // =========================================================================
+
+        /** Navega entre vistas */
+        function switchView(viewName) {
+            document.getElementById('start-screen').classList.add('hidden');
+            document.getElementById('game-screen').classList.add('hidden');
+
+            if (viewName === 'start') {
+                document.getElementById('start-screen').classList.remove('hidden');
+            } else if (viewName === 'game') {
+                document.getElementById('game-screen').classList.remove('hidden');
+            }
+            AppState.view = viewName;
+        }
+
+        /** Inicia el juego con la dificultad seleccionada */
+        function startGame(difficultyKey) {
+            AppState.difficulty = difficultyKey;
+            document.getElementById('current-difficulty').textContent = DIFFICULTY_CONFIG[difficultyKey].name;
+            switchView('game');
+            generateButtons();
+            setupDirectionButtons();
+            nextInterval(); // Comienza el primer ejercicio
+        }
+
+        /** Genera un nuevo intervalo aleatorio y lo dibuja */
+        function generateInterval() {
+            const config = DIFFICULTY_CONFIG[AppState.difficulty];
+
+            // 1. Seleccionar Intervalo y Dirección
+            const intervalSemitones = config.semitones[Math.floor(Math.random() * config.semitones.length)];
+            const direction = config.directions[Math.floor(Math.random() * config.directions.length)];
+
+            AppState.currentIntervalSemitones = intervalSemitones;
+            AppState.currentDirection = direction;
+
+            // 2. Generar Nota Inicial
+            const startNoteMIDI = getRandomStartNoteMIDI();
+            AppState.startNoteMIDI = startNoteMIDI;
+            
+            // 3. Calcular Nota Final (ajustando si es descendente)
+            let endNoteMIDI = startNoteMIDI;
+            let finalSemitones = intervalSemitones;
+
+            if (direction === 'descendente' && intervalSemitones !== 0) {
+                // Para intervalos descendentes, restamos semitonos
+                finalSemitones = -intervalSemitones;
+                endNoteMIDI = startNoteMIDI + finalSemitones;
+
+                // Control de límite inferior (evitar notas demasiado bajas)
+                if (endNoteMIDI < MIN_NOTE_MIDI - 12) {
+                    if (startNoteMIDI - intervalSemitones < MIN_NOTE_MIDI) {
+                        AppState.startNoteMIDI = MAX_NOTE_MIDI; 
+                        endNoteMIDI = AppState.startNoteMIDI + finalSemitones;
+                        if (endNoteMIDI < MIN_NOTE_MIDI - 12) {
+                            AppState.currentDirection = 'ascendente';
+                            endNoteMIDI = AppState.startNoteMIDI + intervalSemitones;
+                        }
+                    } else {
+                        endNoteMIDI = startNoteMIDI + finalSemitones;
+                    }
+                }
+            } else {
+                // Ascendente
+                endNoteMIDI = startNoteMIDI + intervalSemitones;
+                // Control de límite superior (evitar notas demasiado altas)
+                if (endNoteMIDI > MAX_NOTE_MIDI + 12) {
+                    AppState.startNoteMIDI = MIN_NOTE_MIDI;
+                    endNoteMIDI = AppState.startNoteMIDI + intervalSemitones; 
+                    if (endNoteMIDI > MAX_NOTE_MIDI + 12) {
+                        AppState.currentIntervalSemitones = 7;
+                        endNoteMIDI = AppState.startNoteMIDI + AppState.currentIntervalSemitones;
+                    }
+                }
+            }
+
+            AppState.endNoteMIDI = endNoteMIDI;
+
+            // 4. Dibujar
+            const note1VF = midiToVexFlow(AppState.startNoteMIDI);
+            const note2VF = midiToVexFlow(AppState.endNoteMIDI);
+            drawInterval(note1VF, note2VF);
+
+            // 5. Configurar UI y Timer
+            resetUI();
+            startTimer();
+        }
+
+        /** Reinicia el estado del UI para un nuevo ejercicio */
+        function resetUI() {
+            AppState.isChecking = false;
+            AppState.selectedInterval = null;
+            AppState.selectedDirection = 'ascendente';
+
+            document.getElementById('feedback-message').textContent = '';
+            document.getElementById('btn-check').disabled = true;
+            document.getElementById('btn-next').disabled = true;
+
+            // Resetear color de botones
+            document.querySelectorAll('.interval-button-choice').forEach(btn => {
+                btn.classList.remove('bg-blue-400', 'bg-green-600', 'bg-red-600', 'ring-2', 'ring-offset-2', 'ring-blue-400', 'bg-gray-700');
+                btn.classList.add('bg-gray-700');
+            });
+            document.getElementById('btn-ascendente').classList.remove('bg-blue-400', 'ring-2', 'ring-offset-2', 'ring-blue-400');
+            document.getElementById('btn-descendente').classList.remove('bg-blue-400', 'ring-2', 'ring-offset-2', 'ring-blue-400');
+            
+            // Seleccionar visualmente Ascendente por defecto (o la dirección correcta para niveles fáciles)
+            const defaultDirection = DIFFICULTY_CONFIG[AppState.difficulty].directions[0];
+            AppState.selectedDirection = defaultDirection;
+            document.getElementById(`btn-${defaultDirection}`).classList.add('bg-blue-400', 'ring-2', 'ring-offset-2', 'ring-blue-400');
+
+            // Habilitar todos los botones de respuesta
+            document.querySelectorAll('.interval-button-choice, #btn-ascendente, #btn-descendente').forEach(btn => btn.disabled = false);
+
+            // Re-aplicar el estado de los botones de dirección
+            setupDirectionButtons();
+        }
+
+        /** Pasa al siguiente intervalo y resetea */
+        function nextInterval() {
+            stopTimer();
+            generateInterval();
+        }
+
+        /** Selecciona el intervalo y actualiza el estado */
+        function selectInterval(semitones) {
+            AppState.selectedInterval = semitones;
+
+            // Actualizar color de los botones
+            document.querySelectorAll('.interval-button-choice').forEach(btn => {
+                btn.classList.remove('bg-blue-400', 'ring-2', 'ring-offset-2', 'ring-blue-400');
+                btn.classList.add('bg-gray-700');
+            });
+
+            const selectedBtn = document.getElementById(`interval-${semitones}`);
+            if (selectedBtn) {
+                selectedBtn.classList.add('bg-blue-400', 'ring-2', 'ring-offset-2', 'ring-blue-400');
+                selectedBtn.classList.remove('bg-gray-700');
+            }
+
+            // Habilitar Check si el intervalo está seleccionado
+            if (!AppState.isChecking && AppState.selectedInterval !== null) {
+                document.getElementById('btn-check').disabled = false;
+            }
+        }
+
+        /** Selecciona la dirección y actualiza el estado */
+        function selectDirection(direction) {
+            // Solo permitir selección si la dificultad lo permite
+            if (DIFFICULTY_CONFIG[AppState.difficulty].directions.length === 1) return;
+
+            AppState.selectedDirection = direction;
+
+            document.getElementById('btn-ascendente').classList.remove('bg-blue-400', 'ring-2', 'ring-offset-2', 'ring-blue-400');
+            document.getElementById('btn-descendente').classList.remove('bg-blue-400', 'ring-2', 'ring-offset-2', 'ring-blue-400');
+
+            if (direction === 'ascendente') {
+                document.getElementById('btn-ascendente').classList.add('bg-blue-400', 'ring-2', 'ring-offset-2', 'ring-blue-400');
+            } else {
+                document.getElementById('btn-descendente').classList.add('bg-blue-400', 'ring-2', 'ring-offset-2', 'ring-blue-400');
+            }
+
+             // Habilitar Check si el intervalo está seleccionado
+             if (!AppState.isChecking && AppState.selectedInterval !== null) {
+                document.getElementById('btn-check').disabled = false;
+            }
+        }
+
+        /** Comprueba si la respuesta del usuario es correcta */
+        function checkAnswer() {
+            if (AppState.isChecking) return;
+            AppState.isChecking = true;
+            stopTimer(); // Detener el timer al comprobar
+
+            const realInterval = AppState.currentIntervalSemitones;
+            const realDirection = AppState.currentDirection;
+            const selectedInterval = AppState.selectedInterval;
+            const selectedDirection = AppState.selectedDirection;
+
+            const feedbackEl = document.getElementById('feedback-message');
+            const correctIntervalName = INTERVAL_MAP.find(i => i.semitones === realInterval).btnName;
+            
+            // Traduïm les direccions per al missatge
+            const directionMap = { 'ascendente': 'Ascendent', 'descendente': 'Descendent' };
+            const correctDirectionText = directionMap[realDirection];
+
+            let isCorrect = selectedInterval === realInterval;
+            
+            // Solo comprobar la dirección si el nivel lo requiere (dificultad 'dificil')
+            if (DIFFICULTY_CONFIG[AppState.difficulty].directions.length > 1) {
+                isCorrect = isCorrect && (selectedDirection === realDirection);
+            }
+
+            // 1. Mostrar Feedback (en català)
+            if (isCorrect) {
+                feedbackEl.textContent = "¡CORRECTE! 🥳";
+                feedbackEl.classList.remove('text-red-500', 'text-yellow-500');
+                feedbackEl.classList.add('text-green-500');
+
+                // Resaltar la respuesta correcta
+                const correctBtn = document.getElementById(`interval-${realInterval}`);
+                if (correctBtn) {
+                    correctBtn.classList.remove('bg-blue-400', 'bg-gray-700', 'ring-blue-400');
+                    correctBtn.classList.add('bg-green-600', 'ring-green-600');
+                }
+            } else {
+                let message = `INCORRECTE. L'interval real era: ${correctIntervalName}`;
+                if (DIFFICULTY_CONFIG[AppState.difficulty].directions.length > 1) {
+                    message += `, ${correctDirectionText}.`;
+                } else {
+                    message += ".";
+                }
+
+                feedbackEl.textContent = message;
+                feedbackEl.classList.remove('text-green-500', 'text-yellow-500');
+                feedbackEl.classList.add('text-red-500');
+                
+                // Resaltar la respuesta correcta y la del usuario
+                const correctBtn = document.getElementById(`interval-${realInterval}`);
+                if (correctBtn) {
+                    if (correctBtn.classList.contains('bg-blue-400')) {
+                        correctBtn.classList.remove('bg-blue-400', 'ring-blue-400');
+                    }
+                    correctBtn.classList.remove('bg-gray-700');
+                    correctBtn.classList.add('bg-green-600', 'ring-green-600', 'ring-2', 'ring-offset-2');
+                }
+                const selectedBtn = document.getElementById(`interval-${selectedInterval}`);
+                if (selectedBtn && selectedInterval !== realInterval) {
+                     selectedBtn.classList.remove('bg-blue-400', 'ring-blue-400');
+                     selectedBtn.classList.add('bg-red-600', 'ring-red-600');
+                }
+
+                // Resaltar la dirección incorrecta (si aplica)
+                if (DIFFICULTY_CONFIG[AppState.difficulty].directions.length > 1 && selectedDirection !== realDirection) {
+                    document.getElementById(`btn-${selectedDirection}`).classList.remove('bg-blue-400', 'ring-blue-400');
+                    document.getElementById(`btn-${selectedDirection}`).classList.add('bg-red-600', 'ring-red-600', 'ring-2', 'ring-offset-2');
+                }
+                // Resaltar la dirección correcta
+                document.getElementById(`btn-${realDirection}`).classList.add('bg-green-600', 'ring-green-600', 'ring-2', 'ring-offset-2');
+                document.getElementById(`btn-${realDirection}`).classList.remove('bg-gray-600');
+            }
+            
+            // 2. Deshabilitar controles y habilitar 'Siguiente'
+            document.getElementById('btn-check').disabled = true;
+            document.getElementById('btn-next').disabled = false;
+            document.querySelectorAll('.interval-button-choice, #btn-ascendente, #btn-descendente').forEach(btn => btn.disabled = true);
+        }
+
+        // =========================================================================
+        // 4. LÒGICA DEL TEMPORITZADOR
+        // =========================================================================
+
+        function startTimer() {
+            stopTimer(); // Asegura que no haya timers duplicados
+            AppState.timer = 30;
+            const timerEl = document.getElementById('timer-display');
+            timerEl.textContent = AppState.timer;
+            timerEl.className = 'timer-display text-green-500'; // Color inicial
+
+            AppState.timerId = setInterval(() => {
+                AppState.timer--;
+                timerEl.textContent = AppState.timer;
+
+                // Cambio de color según el tiempo restante
+                if (AppState.timer <= 15 && AppState.timer > 10) {
+                    timerEl.className = 'timer-display text-yellow-500';
+                } else if (AppState.timer <= 10 && AppState.timer > 5) {
+                    timerEl.className = 'timer-display text-orange-500';
+                } else if (AppState.timer <= 5) {
+                    timerEl.className = 'timer-display text-red-600';
+                }
+
+                if (AppState.timer <= 0) {
+                    stopTimer();
+                    // Simular respuesta incorrecta por tiempo
+                    if (!AppState.isChecking) {
+                        AppState.selectedInterval = -1; // Marcador de sin respuesta
+                        checkAnswer();
+                        document.getElementById('feedback-message').textContent += " (Temps Esgotat)";
+                    }
+                }
+            }, 1000);
+        }
+
+        function stopTimer() {
+            if (AppState.timerId) {
+                clearInterval(AppState.timerId);
+                AppState.timerId = null;
+            }
+        }
+
+        // =========================================================================
+        // 5. GENERACIÓ DINÀMICA DE BOTONS I SETUP
+        // =========================================================================
+
+        /** Genera los 13 botones de intervalo dinámicamente */
+        function generateButtons() {
+            const container = document.getElementById('interval-buttons-container');
+            container.innerHTML = ''; // Limpiar
+
+            INTERVAL_MAP.forEach(interval => {
+                const btn = document.createElement('button');
+                btn.id = `interval-${interval.semitones}`;
+                // Usa el nom del botó en català
+                btn.textContent = interval.btnName;
+                btn.setAttribute('onclick', `IntervallyApp.selectInterval(${interval.semitones})`);
+                btn.className = 'interval-button interval-button-choice p-3 rounded-lg font-semibold bg-gray-700 hover:bg-gray-600 text-white transition duration-150 border-2 border-transparent focus:border-blue-400';
+                container.appendChild(btn);
+            });
+        }
+
+        /** Configura el estado de los botones de dirección según la dificultad */
+        function setupDirectionButtons() {
+            const isDirectionEnabled = DIFFICULTY_CONFIG[AppState.difficulty].directions.length > 1;
+            const btnDescendente = document.getElementById('btn-descendente');
+            const btnAscendente = document.getElementById('btn-ascendente');
+
+            // Habilitar/Deshabilitar botón de dirección descendente
+            if (isDirectionEnabled) {
+                btnDescendente.classList.remove('direction-disabled', 'opacity-50', 'bg-gray-500');
+                btnDescendente.disabled = false;
+                btnDescendente.classList.add('bg-gray-600', 'hover:bg-gray-500');
+
+                btnAscendente.classList.remove('bg-gray-500');
+                btnAscendente.classList.add('bg-gray-600', 'hover:bg-gray-500');
+
+            } else {
+                // Si solo es ascendente, deshabilitamos la opción descendente
+                btnDescendente.classList.add('direction-disabled', 'opacity-50', 'bg-gray-500');
+                btnDescendente.classList.remove('bg-gray-600', 'hover:bg-gray-500');
+                btnDescendente.disabled = true;
+
+                // Asegurar que Ascendente esté seleccionado visualmente y no esté deshabilitado
+                btnAscendente.disabled = false;
+                btnAscendente.classList.remove('direction-disabled', 'opacity-50', 'bg-gray-500', 'bg-gray-600');
+                btnAscendente.classList.add('bg-blue-400', 'ring-2', 'ring-offset-2', 'ring-blue-400');
+            }
+        }
+
+        // Exponer la API de la aplicación para los listeners del HTML
+        const IntervallyApp = {
+            startGame,
+            nextInterval,
+            checkAnswer,
+            selectInterval,
+            selectDirection
+        };
+
+        // =========================================================================
+        // 6. INICIALIZACIÓN
+        // =========================================================================
+
+        window.onload = () => {
+            // Aseguramos que la vista inicial se muestre al cargar
+            switchView('start');
+        };
+    </script>
+</body>
+</html>
