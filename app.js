@@ -32,10 +32,10 @@ const DIFFICULTY_CONFIG = {
 const SEMITONE_NOTE_MAP = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
 const MIN_NOTE_MIDI = 57; // A3
-const MAX_NOTE_MIDI = 81; // A5
+const MAX_NOTE_MIDI = 69; // A4 (reduït una octava)
 
 const PITCH_RANGE_MIDI_MIN = 45;
-const PITCH_RANGE_MIDI_MAX = 93;
+const PITCH_RANGE_MIDI_MAX = 81; // reduït una octava
 
 const AppState = {
     difficulty: null,
@@ -55,9 +55,36 @@ const AppState = {
         stave: null,
         context: null,
     },
+    lastVFNotes: null,
 };
 
 const DOM = {};
+
+// Resolució robusta del namespace de VexFlow per compatibilitat entre versions (v3 i v4+)
+function getVexFlowNamespace() {
+    const globalObj = typeof window !== 'undefined' ? window : globalThis;
+    if (!globalObj) return null;
+    // v3 UMD habitual: window.Vex.Flow
+    if (globalObj.Vex && globalObj.Vex.Flow) return globalObj.Vex.Flow;
+    // v4 UMD bundler: classes directes a window.Vex
+    if (globalObj.Vex && !globalObj.Vex.Flow) return globalObj.Vex;
+    // Algunes builds poden exposar window.VexFlow
+    if (globalObj.VexFlow) return globalObj.VexFlow;
+    return null;
+}
+
+function validateVexFlow(VF) {
+    if (!VF) return { ok: false, reason: 'VF namespace not found' };
+    const required = ['Renderer', 'Stave', 'StaveNote', 'Voice', 'Formatter'];
+    const missing = required.filter(k => typeof VF[k] === 'undefined');
+    if (missing.length > 0) {
+        return { ok: false, reason: `Missing exports: ${missing.join(', ')}` };
+    }
+    if (!VF.Renderer.Backends || typeof VF.Renderer.Backends.SVG === 'undefined') {
+        return { ok: false, reason: 'Renderer.Backends.SVG not available' };
+    }
+    return { ok: true };
+}
 
 function cacheDOMElements() {
     DOM.startScreen = document.getElementById('start-screen');
@@ -91,7 +118,174 @@ function midiToVexFlow(midiNote) {
         accidental = noteName.substring(1);
         noteName = noteName.substring(0, 1);
     }
-    return { key: `${noteName}/${octave}`, accidental: accidental };
+    return { key: `${noteName.toLowerCase()}/${octave}`, accidental: accidental };
+}
+
+// Utilitats de notació diatònica
+const LETTERS = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
+const LETTER_BASE_SEMITONES = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+
+function normalizeOctaveForTarget(startOctave, startLetterIdx, targetLetterIdx, ascending) {
+    let octave = startOctave;
+    if (ascending) {
+        if (targetLetterIdx < startLetterIdx) octave += 1;
+    } else {
+        if (targetLetterIdx > startLetterIdx) octave -= 1;
+    }
+    return octave;
+}
+
+function midiToSpelling(midiNote) {
+    const octave = Math.floor(midiNote / 12) - 1;
+    const semi = midiNote % 12;
+    // Tria la lletra natural més propera (preferim naturals si possible)
+    let bestLetter = 'C';
+    let bestDiff = 999;
+    for (const L of LETTERS) {
+        const base = LETTER_BASE_SEMITONES[L];
+        const diff = Math.abs(semi - base);
+        if (diff < bestDiff) {
+            bestDiff = diff;
+            bestLetter = L;
+        }
+    }
+    const accidental = semi - LETTER_BASE_SEMITONES[bestLetter]; // pot ser negatiu
+    return { letter: bestLetter, accidental: accidental, octave: octave };
+}
+
+function computeLetterStepsForSemitones(semitones) {
+    const map = { 0:0, 1:1, 2:1, 3:2, 4:2, 5:3, 6:3, 7:4, 8:5, 9:5, 10:6, 11:6, 12:0 };
+    return map[semitones] ?? 0;
+}
+
+function spelledToMidi(spell) {
+    const base = LETTER_BASE_SEMITONES[spell.letter];
+    const pitchClass = (base + spell.accidental + 12) % 12;
+    const midi = (spell.octave + 1) * 12 + pitchClass;
+    return midi;
+}
+
+function accidentalToVexSymbol(acc) {
+    if (acc === -2) return 'bb';
+    if (acc === -1) return 'b';
+    if (acc === 1) return '#';
+    if (acc === 2) return '##';
+    return '';
+}
+
+function spellingToVexKey(spell) {
+    return `${spell.letter.toLowerCase()}/${spell.octave}`;
+}
+
+function bestAccidentalForBaseToPitchClass(basePitchClass, targetPitchClass) {
+    const deltaMod = (targetPitchClass - basePitchClass + 12) % 12;
+    const candidates = [0, 1, -1, 2, -2];
+    for (const c of candidates) {
+        if (((c % 12) + 12) % 12 === deltaMod) return c;
+    }
+    // Fallback: pick closest within +/-2
+    let best = 0;
+    let bestDist = 999;
+    for (let c = -2; c <= 2; c++) {
+        const dist = Math.min((deltaMod - ((c + 12) % 12) + 12) % 12, (((c + 12) % 12) - deltaMod + 12) % 12);
+        if (dist < bestDist) { bestDist = dist; best = c; }
+    }
+    return best;
+}
+
+function getIntervalNoteRenderData(startMidi, semitones, direction, enforceNaturals) {
+    const ascending = direction !== 'descendente';
+    const startSpell = midiToSpelling(startMidi);
+    if (enforceNaturals) startSpell.accidental = 0;
+
+    const steps = computeLetterStepsForSemitones(semitones);
+    const startLetterIdx = LETTERS.indexOf(startSpell.letter);
+    const targetLetterIdx = (startLetterIdx + (ascending ? steps : -steps) + 7) % 7;
+    const targetLetter = LETTERS[targetLetterIdx];
+    let targetOctave = normalizeOctaveForTarget(startSpell.octave, startLetterIdx, targetLetterIdx, ascending);
+    // Si l'interval és 8a (12 semitons), cal forçar canvi d'octava encara que la lletra sigui la mateixa
+    if (semitones % 12 === 12 % 12 && semitones !== 0) {
+        targetOctave = targetOctave + (ascending ? 1 : -1);
+    }
+
+    const targetPitchMidi = startMidi + (ascending ? semitones : -semitones);
+    const targetPC = ((targetPitchMidi % 12) + 12) % 12;
+    const base = LETTER_BASE_SEMITONES[targetLetter];
+    let targetAcc = bestAccidentalForBaseToPitchClass(base, targetPC);
+    if (enforceNaturals) targetAcc = 0;
+
+    const endSpell = { letter: targetLetter, accidental: targetAcc, octave: targetOctave };
+
+    const startVF = { key: spellingToVexKey(startSpell), accidental: accidentalToVexSymbol(startSpell.accidental) };
+    const endVF = { key: spellingToVexKey(endSpell), accidental: accidentalToVexSymbol(endSpell.accidental) };
+    return { startVF, endVF };
+}
+
+function isNaturalSemiIndex(semiIndex) {
+    // Naturals: C(0), D(2), E(4), F(5), G(7), A(9), B(11)
+    return semiIndex === 0 || semiIndex === 2 || semiIndex === 4 || semiIndex === 5 || semiIndex === 7 || semiIndex === 9 || semiIndex === 11;
+}
+
+function isNaturalMidi(midiNote) {
+    const semi = midiNote % 12;
+    return isNaturalSemiIndex(semi);
+}
+
+// Intenta carregar VexFlow dinàmicament si no està disponible
+function injectScript(src) {
+    return new Promise((resolve, reject) => {
+        const existing = document.querySelector(`script[data-dynamic-vexflow=\"${src}\"]`);
+        if (existing) {
+            existing.addEventListener('load', () => resolve());
+            existing.addEventListener('error', () => reject(new Error('Script load error')));
+            return;
+        }
+        const s = document.createElement('script');
+        s.src = src;
+        s.defer = true;
+        s.setAttribute('data-dynamic-vexflow', src);
+        s.onload = () => resolve();
+        s.onerror = () => reject(new Error(`Failed loading ${src}`));
+        document.head.appendChild(s);
+    });
+}
+
+async function attemptLoadVexFlowSequential(urls) {
+    for (const url of urls) {
+        try {
+            console.warn(`Intentant carregar VexFlow des de: ${url}`);
+            await injectScript(url);
+            const ns = getVexFlowNamespace();
+            if (ns) {
+                console.log(`VexFlow carregat des de: ${url}`);
+                return ns;
+            }
+        } catch (e) {
+            console.warn(e && (e.message || e));
+        }
+    }
+    return null;
+}
+
+function setupVexFlowRenderer(VF) {
+    const container = DOM.staveDisplayContainer;
+    const containerWidth = DOM.staveContainer && typeof DOM.staveContainer.clientWidth === 'number' ? DOM.staveContainer.clientWidth : 0;
+    const innerWidth = containerWidth - 32;
+    const safeInnerWidth = Number.isFinite(innerWidth) ? innerWidth : 0;
+    const clampedWidth = Math.max(100, Math.min(safeInnerWidth > 0 ? safeInnerWidth : 600, 800));
+    const width = clampedWidth;
+    const height = 150;
+
+    const renderer = new VF.Renderer(container, VF.Renderer.Backends.SVG);
+    renderer.resize(width, height);
+    const context = renderer.getContext();
+    const stave = new VF.Stave(10, 0, width - 20);
+    // Ajusta el compàs a 2/4 per a dues notes quarter
+    stave.addClef('treble').addTimeSignature('2/4');
+    stave.setContext(context).draw();
+    AppState.vexFlow = { renderer, context, stave, VF };
+
+    window.addEventListener('resize', handleResize);
 }
 
 function drawInterval(note1VF, note2VF) {
@@ -101,12 +295,18 @@ function drawInterval(note1VF, note2VF) {
         return;
     }
 
-    const { context, stave } = AppState.vexFlow;
-    context.clear();
+    const { context, stave, VF } = AppState.vexFlow;
+    if (typeof context.clear === 'function') {
+        context.clear();
+    } else if (DOM.staveDisplayContainer) {
+        // Esborra el contingut del contenidor SVG si el context no té clear()
+        while (DOM.staveDisplayContainer.firstChild) {
+            DOM.staveDisplayContainer.removeChild(DOM.staveDisplayContainer.firstChild);
+        }
+    }
     stave.draw();
 
     try {
-        const VF = Vex.Flow;
         const notes = [
             new VF.StaveNote({ clef: 'treble', keys: [note1VF.key], duration: 'q' }),
             new VF.StaveNote({ clef: 'treble', keys: [note2VF.key], duration: 'q' })
@@ -119,12 +319,34 @@ function drawInterval(note1VF, note2VF) {
             notes[1].addAccidental(0, new VF.Accidental(note2VF.accidental));
         }
 
-        const voice = new VF.Voice({ num_beats: 2, beat_value: 4 }).addTickables(notes);
-        new VF.Formatter().joinVoices([voice]).format([voice], stave.getWidth() - 40);
+        let voice;
+        try {
+            // VexFlow v4 prefereix l'objecte time
+            voice = new VF.Voice({ time: { num_beats: 2, beat_value: 4 } });
+        } catch (_) {
+            // Compatibilitat v3
+            voice = new VF.Voice({ num_beats: 2, beat_value: 4 });
+        }
+        if (voice && VF.Voice && VF.Voice.Mode && typeof voice.setMode === 'function') {
+            // Mode SOFT no exigeix quadrar exactament el total de ticks amb el compàs
+            voice.setMode(VF.Voice.Mode.SOFT);
+        } else if (typeof voice.setStrict === 'function') {
+            voice.setStrict(false);
+        }
+        voice.addTickables(notes);
+
+        const formatter = new VF.Formatter();
+        if (typeof formatter.joinVoices === 'function') {
+            formatter.joinVoices([voice]).format([voice], Math.max(50, stave.getWidth() - 40));
+        } else {
+            // En algunes versions, joinVoices no és necessari o no existeix
+            formatter.format([voice], Math.max(50, stave.getWidth() - 40));
+        }
         voice.draw(context, stave);
     } catch (error) {
         console.error("Error drawing with VexFlow: ", error);
-        container.innerHTML = `<div class="p-4 text-center text-gray-800"><p class="font-bold text-xl text-red-600">⚠️ Error de Visualització</p><p class="text-sm mt-1">S'ha produït un error en dibuixar l'interval. La lògica del joc continua.</p></div>`;
+        const safeMsg = (error && (error.message || String(error))) || 'Unknown error';
+        container.innerHTML = `<div class="p-4 text-center text-gray-800"><p class="font-bold text-xl text-red-600">⚠️ Error de Visualització</p><p class="text-sm mt-1">${safeMsg}</p><p class="text-xs mt-1">Revisa la consola per a més detalls.</p></div>`;
     }
 }
 
@@ -132,7 +354,11 @@ function handleResize() {
     if (!AppState.isVexFlowLoaded || !DOM.staveContainer) return;
 
     const container = DOM.staveContainer;
-    const width = Math.min(container.clientWidth - 32 || 600, 800);
+    const containerWidth = container && typeof container.clientWidth === 'number' ? container.clientWidth : 0;
+    const innerWidth = containerWidth - 32;
+    const safeInnerWidth = Number.isFinite(innerWidth) ? innerWidth : 0;
+    const clampedWidth = Math.max(100, Math.min(safeInnerWidth > 0 ? safeInnerWidth : 600, 800));
+    const width = clampedWidth;
     const height = 150;
 
     AppState.vexFlow.renderer.resize(width, height);
@@ -188,24 +414,54 @@ function generateInterval() {
 
     let startNoteMIDI;
     let endNoteMIDI;
+
     if (direction === 'descendente') {
         const safeMinStart = PITCH_RANGE_MIDI_MIN + intervalSemitones;
         const actualMin = Math.max(MIN_NOTE_MIDI, safeMinStart);
         const actualMax = MAX_NOTE_MIDI;
-        startNoteMIDI = Math.floor(Math.random() * (actualMax - actualMin + 1)) + actualMin;
+
+        if (AppState.difficulty === 'inicial') {
+            // Selecciona una nota inicial tal que tant l'inici com el final siguin naturals
+            const candidates = [];
+            for (let m = actualMin; m <= actualMax; m++) {
+                const end = m - intervalSemitones;
+                if (isNaturalMidi(m) && isNaturalMidi(end)) candidates.push(m);
+            }
+            if (candidates.length > 0) {
+                startNoteMIDI = candidates[Math.floor(Math.random() * candidates.length)];
+            } else {
+                startNoteMIDI = Math.floor(Math.random() * (actualMax - actualMin + 1)) + actualMin;
+            }
+        } else {
+            startNoteMIDI = Math.floor(Math.random() * (actualMax - actualMin + 1)) + actualMin;
+        }
         endNoteMIDI = startNoteMIDI - intervalSemitones;
     } else {
         const safeMaxStart = PITCH_RANGE_MIDI_MAX - intervalSemitones;
         const actualMin = MIN_NOTE_MIDI;
         const actualMax = Math.min(MAX_NOTE_MIDI, safeMaxStart);
-        startNoteMIDI = Math.floor(Math.random() * (actualMax - actualMin + 1)) + actualMin;
+
+        if (AppState.difficulty === 'inicial') {
+            const candidates = [];
+            for (let m = actualMin; m <= actualMax; m++) {
+                const end = m + intervalSemitones;
+                if (isNaturalMidi(m) && isNaturalMidi(end)) candidates.push(m);
+            }
+            if (candidates.length > 0) {
+                startNoteMIDI = candidates[Math.floor(Math.random() * candidates.length)];
+            } else {
+                startNoteMIDI = Math.floor(Math.random() * (actualMax - actualMin + 1)) + actualMin;
+            }
+        } else {
+            startNoteMIDI = Math.floor(Math.random() * (actualMax - actualMin + 1)) + actualMin;
+        }
         endNoteMIDI = startNoteMIDI + intervalSemitones;
     }
 
     AppState.startNoteMIDI = startNoteMIDI;
-    const note1VF = midiToVexFlow(startNoteMIDI);
-    const note2VF = midiToVexFlow(endNoteMIDI);
-    drawInterval(note1VF, note2VF);
+    const enforceNaturals = AppState.difficulty === 'inicial';
+    const { startVF, endVF } = getIntervalNoteRenderData(startNoteMIDI, intervalSemitones, direction, enforceNaturals);
+    drawInterval(startVF, endVF);
 
     resetUI();
     startTimer();
@@ -464,37 +720,61 @@ const IntervallyApp = {
 function init() {
     cacheDOMElements();
 
-    if (typeof Vex !== 'undefined' && typeof Vex.Flow !== 'undefined') {
+    const VFNS = getVexFlowNamespace();
+    if (VFNS) {
         AppState.isVexFlowLoaded = true;
-        console.log("VexFlow (Notació Musical) carregat correctament.");
+        const validation = validateVexFlow(VFNS);
+        if (!validation.ok) {
+            console.warn(`VexFlow trobat però incomplet: ${validation.reason}`);
+            AppState.isVexFlowLoaded = false;
+        } else {
+            console.log("VexFlow carregat correctament.");
+        }
 
         try {
-            const VF = Vex.Flow;
-            const container = DOM.staveDisplayContainer;
-            const width = Math.min(DOM.staveContainer.clientWidth - 32 || 600, 800);
-            const height = 150;
-
-            const renderer = new VF.Renderer(container, VF.Renderer.Backends.SVG);
-            renderer.resize(width, height);
-            const context = renderer.getContext();
-            const stave = new VF.Stave(10, 0, width - 20);
-            stave.addClef('treble').addTimeSignature('4/4');
-            stave.setContext(context).draw();
-
-            AppState.vexFlow = { renderer, context, stave };
-
-            window.addEventListener('resize', handleResize);
+            const VF = VFNS;
+            setupVexFlowRenderer(VF);
         } catch (error) {
             console.error("Error initializing VexFlow: ", error);
             AppState.isVexFlowLoaded = false;
+            if (DOM.staveDisplayContainer) {
+                const safeMsg = (error && (error.message || String(error))) || 'Unknown init error';
+                DOM.staveDisplayContainer.innerHTML = `<div class=\"p-4 text-center text-gray-800\"><p class=\"font-bold text-xl text-red-600\">⚠️ Error d'Inicialització</p><p class=\"text-sm mt-1\">${safeMsg}</p></div>`;
+            }
         }
 
     } else {
         AppState.isVexFlowLoaded = false;
-        console.warn("VexFlow no detectat. El pentagrama no es dibuixarà, però la lògica de joc funcionarà.");
+        console.warn("VexFlow no detectat. Intentant càrrega alternativa...");
+        // Prova en cascada: v4, v4 min, v3 clàssic
+        const fallbacks = [
+            'https://cdn.jsdelivr.net/npm/vexflow@4.2.3/build/vexflow.js',
+            'https://cdn.jsdelivr.net/npm/vexflow@4.2.3/build/vexflow-min.js',
+            'https://unpkg.com/vexflow@3.0.9/releases/vexflow-debug.js'
+        ];
+        attemptLoadVexFlowSequential(fallbacks).then(ns => {
+            if (ns) {
+                const validation = validateVexFlow(ns);
+                if (!validation.ok) {
+                    console.warn(`VexFlow carregat però incomplet via fallback: ${validation.reason}`);
+                    return;
+                }
+                AppState.isVexFlowLoaded = true;
+                setupVexFlowRenderer(ns);
+            } else {
+                console.warn('No s\'ha pogut carregar VexFlow amb els fallbacks.');
+            }
+        }).catch(err => {
+            console.warn('Error carregant VexFlow via fallback:', err && (err.message || err));
+        });
     }
 
     switchView('start');
 }
 
 document.addEventListener('DOMContentLoaded', init);
+
+// Exposa l'API perquè els 'onclick' inline d'HTML funcionin en tots els navegadors
+if (typeof window !== 'undefined') {
+    window.IntervallyApp = IntervallyApp;
+}
