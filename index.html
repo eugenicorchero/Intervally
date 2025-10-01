@@ -6,7 +6,7 @@
     <title>Intervally - Entrenador Visual d'Intervals Musicals</title>
     <!-- Càrrega de Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Càrrega de VexFlow amb 'defer' per a una càrrega asíncrona -->
+    <!-- Càrrega de VexFlow amb 'defer' per a una càrrega asíncrona (sense bloquejar l'inici) -->
     <script src="https://cdn.jsdelivr.net/npm/vexflow@4.2.3/build/vexflow.js" defer></script>
     <style>
         /* Estils Base i Rendiment */
@@ -18,11 +18,11 @@
         }
         .interval-button {
             transition: all 0.1s ease;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.06);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
         }
         .interval-button:hover:not(:disabled) {
             transform: translateY(-2px);
-            box-shadow: 0 10px 15px -3px rgba(37, 99, 235, 0.2), 0 4px 6px -4px rgba(37, 99, 235, 0.1);
+            box-shadow: 0 10px 20px -3px rgba(37, 99, 235, 0.3), 0 4px 6px -4px rgba(37, 99, 235, 0.2);
         }
         .timer-display {
             font-size: 1.5rem;
@@ -44,10 +44,23 @@
         #stave-container {
             min-height: 150px;
             padding: 16px; 
+            /* Ajusta el color de fons del pentagrama per a que contrasti millor */
+            background-color: #ffffff; 
+            display: flex; /* Per centrar el missatge d'error */
+            align-items: center;
+            justify-content: center;
         }
         #stave-display {
             width: 100%;
             height: 100%;
+        }
+        /* Centrar verticalment si la pantalla és prou gran */
+        @media (min-height: 700px) {
+            body {
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+            }
         }
     </style>
 </head>
@@ -65,13 +78,13 @@
         <!-- PANTALLA INICIAL (Mostrada immediatament) -->
         <section id="start-screen" class="text-center p-8 bg-gray-800 rounded-xl shadow-2xl transition duration-500">
             
-            <!-- Indicador de Càrrega (Mostrat inicialment) -->
-            <div id="loading-indicator" class="p-8 text-xl font-semibold text-blue-400">
+            <!-- Indicador de Càrrega (Només si VexFlow no s'ha carregat) -->
+            <div id="loading-indicator" class="p-8 text-xl font-semibold text-blue-400 hidden">
                 Carregant recursos musicals... 🎶
             </div>
 
-            <!-- Contingut d'Introducció (Ocult inicialment per a esperar VexFlow) -->
-            <div id="intro-content" class="hidden">
+            <!-- Contingut d'Introducció -->
+            <div id="intro-content">
                 <h2 class="text-3xl font-bold mb-6 text-white">Benvingut/da! Tria el teu Nivell de Pràctica</h2>
                 <p class="text-gray-300 mb-10 max-w-2xl mx-auto">
                     Practica la identificació d'intervals musicals de forma visual. Selecciona un nivell de dificultat per començar.
@@ -81,12 +94,12 @@
                     <button id="btn-inicial" onclick="IntervallyApp.startGame('inicial')"
                         class="p-6 bg-blue-700 hover:bg-blue-600 text-white font-semibold rounded-lg shadow-lg transition duration-300 transform hover:scale-[1.02] interval-button">
                         <span class="text-2xl block">Inicial</span>
-                        <span class="text-sm opacity-75 mt-1 block">(Ascendent: Uníson, 2a M, 3a M, 4a J, 5a J, 6a M, 7a M)</span>
+                        <span class="text-sm opacity-75 mt-1 block">(Ascendent: Uníson, 2a M, 3a M, 4a J, 5a J, 6a M, 7a M, 8a J)</span>
                     </button>
                     <button id="btn-intermedio" onclick="IntervallyApp.startGame('intermedio')"
                         class="p-6 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-lg shadow-lg transition duration-300 transform hover:scale-[1.02] interval-button">
                         <span class="text-2xl block">Intermedi</span>
-                        <span class="text-sm opacity-75 mt-1 block">(Ascendent: Tots els intervals fins a 8a J)</span>
+                        <span class="text-sm opacity-75 mt-1 block">(Ascendent: Tots els intervals fins a 8a J, incloent menors i augmentats/disminuïts)</span>
                     </button>
                     <button id="btn-dificil" onclick="IntervallyApp.startGame('dificil')"
                         class="p-6 bg-blue-500 hover:bg-blue-400 text-white font-semibold rounded-lg shadow-lg transition duration-300 transform hover:scale-[1.02] interval-button">
@@ -98,10 +111,10 @@
         </section>
 
         <!-- PANTALLA DE PRÀCTICA -->
-        <section id="game-screen" class="hidden flex flex-col space-y-6 p-4">
+        <section id="game-screen" class="hidden flex flex-col space-y-6 p-4 bg-gray-800 rounded-xl shadow-2xl">
 
             <!-- Display del Temporitzador, Dificultat i Puntuació -->
-            <div class="flex flex-col sm:flex-row justify-between items-center px-2 py-3 bg-gray-800 rounded-lg shadow-inner gap-4">
+            <div class="flex flex-col sm:flex-row justify-between items-center px-4 py-3 bg-gray-900 rounded-lg shadow-inner gap-4 border border-gray-700">
                 <div class="text-lg text-gray-400">Dificultat: <span id="current-difficulty" class="font-semibold text-blue-300"></span></div>
                 
                 <!-- Puntuació -->
@@ -117,21 +130,23 @@
             </div>
 
             <!-- Display de VexFlow (Pentagrama) -->
-            <div id="stave-container" class="bg-white rounded-lg shadow-xl border border-gray-700">
-                <div id="stave-display"></div>
+            <div id="stave-container" class="rounded-lg shadow-xl border border-gray-700">
+                <!-- Aquí es dibuixarà VexFlow o el missatge d'error -->
+                <div id="stave-display"></div> 
             </div>
 
             <!-- Controls de Resposta -->
             <div class="space-y-4">
-                <h3 class="text-xl font-semibold text-white border-b border-gray-700 pb-2">Selecciona la Resposta</h3>
+                <h3 class="text-xl font-semibold text-white border-b border-gray-700 pb-2 pt-2">Selecciona la Resposta</h3>
 
                 <!-- Botons d'Interval (13) -->
+                <!-- La mida del contenidor canvia segons la dificultat per mantenir un layout net -->
                 <div id="interval-buttons-container" class="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7 gap-3">
                     <!-- Els botons es generaran amb JS -->
                 </div>
 
                 <!-- Botons de Direcció (Ascendent/Descendent) -->
-                <div class="flex justify-center space-x-4 p-3 bg-gray-800 rounded-lg">
+                <div class="flex justify-center space-x-4 p-3 bg-gray-900 rounded-lg border border-gray-700">
                     <button id="btn-ascendente" onclick="IntervallyApp.selectDirection('ascendente')"
                         class="interval-button p-3 w-1/2 rounded-lg font-semibold bg-gray-600 hover:bg-gray-500 text-white border-2 border-transparent focus:border-blue-400 transition duration-150">
                         Ascendent
@@ -148,11 +163,11 @@
                 <!-- Botons de Control (Comprovar i Següent) -->
                 <div class="flex justify-center space-x-4 pt-4 border-t border-gray-700">
                     <button id="btn-check" onclick="IntervallyApp.checkAnswer()" disabled
-                        class="p-4 rounded-lg font-bold w-1/2 bg-blue-700 hover:bg-blue-600 text-white disabled:bg-gray-500 disabled:cursor-not-allowed transition duration-150">
+                        class="p-4 rounded-lg font-bold w-1/2 bg-blue-700 hover:bg-blue-600 text-white disabled:bg-gray-500 disabled:cursor-not-allowed transition duration-150 transform hover:scale-[1.01] interval-button">
                         Comprova
                     </button>
                     <button id="btn-next" onclick="IntervallyApp.nextInterval()" disabled
-                        class="p-4 rounded-lg font-bold w-1/2 bg-gray-600 hover:bg-500 text-white disabled:opacity-50 disabled:cursor-not-allowed transition duration-150">
+                        class="p-4 rounded-lg font-bold w-1/2 bg-gray-600 hover:bg-gray-500 text-white disabled:opacity-50 disabled:cursor-not-allowed transition duration-150 transform hover:scale-[1.01] interval-button">
                         Següent Interval
                     </button>
                 </div>
@@ -182,11 +197,17 @@
             { semitones: 11, name: '7a major', btnName: '7a M' },
             { semitones: 12, name: '8a Justa', btnName: '8a J' },
         ];
+        
+        // Mapeig ràpid per trobar la configuració d'un interval a partir dels semitons
+        const getIntervalInfo = (semitones) => INTERVAL_MAP.find(i => i.semitones === semitones);
 
         // Configuració dels nivells de dificultat (Base de dades de distàncies)
         const DIFFICULTY_CONFIG = {
+            // Només intervals consonàntics i justos (excloent Tritó, 2a m, 3a m, 6a m, 7a m)
             'inicial': { semitones: [0, 2, 4, 5, 7, 9, 11, 12], directions: ['ascendente'], name: 'Inicial' },
+            // Tots els intervals (0-12 semitons) de forma ascendent
             'intermedio': { semitones: INTERVAL_MAP.map(i => i.semitones), directions: ['ascendente'], name: 'Intermedi' },
+            // Tots els intervals (0-12 semitons) en ambdues direccions
             'dificil': { semitones: INTERVAL_MAP.map(i => i.semitones), directions: ['ascendente', 'descendente'], name: 'Difícil' }
         };
 
@@ -216,6 +237,8 @@
             isChecking: false,
             totalAttempts: 0,
             correctAnswers: 0,
+            // Flag per indicar si VexFlow s'ha detectat (s'actualitza a l'inici)
+            isVexFlowLoaded: false, 
         };
 
         // Cache d'elements del DOM (Objecte de referència ràpida)
@@ -245,7 +268,7 @@
 
 
         // =========================================================================
-        // 2. FUNCIONS DE VEXFLOW I UTILITAT MUSICAL (REFRACTORITZAT)
+        // 2. FUNCIONS DE VEXFLOW I UTILITAT MUSICAL (Tolerant a errors)
         // =========================================================================
         
         /** Converteix una nota MIDI a l'estructura de VexFlow (p. ex., { key: 'C/4', accidental: '#' }) */
@@ -264,45 +287,50 @@
             return { key: `${noteName}/${octave}`, accidental: accidental };
         }
 
-        /** Dibuixa l'interval de dues notes usant VexFlow (Implementació robusta). */
+        /** Dibuixa l'interval de dues notes usant VexFlow, o mostra un error si no està carregat. */
         function drawInterval(note1VF, note2VF) {
-            if (typeof Vex === 'undefined' || typeof Vex.Flow === 'undefined') {
-                 console.error("VexFlow no està carregat. No es pot dibuixar l'interval.");
-                 DOM.staveDisplayContainer.innerHTML = `<p class="text-red-500 text-center pt-8">Error: No es pot carregar el pentagrama (VexFlow no disponible).</p>`;
-                 return;
-            }
-
             const container = DOM.staveDisplayContainer;
             container.innerHTML = ''; 
             
+            // 1. Comprovació de Càrrega de VexFlow
+            if (!AppState.isVexFlowLoaded || typeof Vex === 'undefined' || typeof Vex.Flow === 'undefined') {
+                 // Missatge de fallback si VexFlow no està disponible
+                 container.innerHTML = `
+                    <div class="p-4 text-center text-gray-800">
+                        <p class="font-bold text-xl text-red-600">⚠️ Error de Càrrega Musical</p>
+                        <p class="text-sm mt-1">No s'ha pogut carregar VexFlow per dibuixar el pentagrama.</p>
+                        <p class="text-sm">La lògica de l'interval s'ha generat internament. Prem "Comprova" amb la teva resposta.</p>
+                    </div>
+                 `;
+                 return; // Surt de la funció si no pot dibuixar
+            }
+
             const VF = Vex.Flow;
 
-            // 1. Neteja i Determinació de Mides
+            // 2. Neteja i Determinació de Mides
             const width = Math.min(DOM.staveContainer.clientWidth - 32 || 600, 800); 
             const height = 150;
 
             try {
-                // 2. Inicialitzar Renderer i Context
-                // Utilitzem SVG per a una millor escalabilitat i rendiment al web
+                // 3. Inicialitzar Renderer i Context (SVG per millor escalabilitat)
                 const renderer = new VF.Renderer(container, VF.Renderer.Backends.SVG);
                 renderer.resize(width, height);
                 const context = renderer.getContext();
                 context.setFont('Arial', 10);
                 context.clear(); 
 
-                // 3. Crear Pentagrama (Stave)
-                // Offset de 10px a l'esquerra per marge i 20px de marge dret
+                // 4. Crear Pentagrama (Stave)
                 const stave = new VF.Stave(10, 0, width - 20); 
                 stave.addClef('treble').addTimeSignature('4/4');
                 stave.setContext(context).draw();
 
-                // 4. Crear les Notes (StaveNote)
+                // 5. Crear les Notes (StaveNote). Utilitzem 'q' (quarter note / negra)
                 const notes = [
                     new VF.StaveNote({ clef: 'treble', keys: [note1VF.key], duration: 'q' }),
                     new VF.StaveNote({ clef: 'treble', keys: [note2VF.key], duration: 'q' })
                 ];
 
-                // Afegir accidentals si cal. VexFlow s'encarrega de dibuixar-los.
+                // Afegir accidentals
                 if (note1VF.accidental) {
                     notes[0].addAccidental(0, new VF.Accidental(note1VF.accidental));
                 }
@@ -310,19 +338,24 @@
                     notes[1].addAccidental(0, new VF.Accidental(note2VF.accidental));
                 }
 
-                // 5. Crear Veu (Voice)
+                // 6. Crear Veu (Voice)
                 const voice = new VF.Voice({ num_beats: 2, beat_value: 4 }).addTickables(notes);
 
-                // 6. Formatar i Dibuixar
-                // Formateja les veus i determina la posició horizontal de les notes
+                // 7. Formatar i Dibuixar
                 new VF.Formatter().joinVoices([voice]).format([voice], width - 40); 
-                
-                // Dibuixa les notes al pentagrama
                 voice.draw(context, stave);
+                
+                // Mantenir la mida de l'SVG consistent
+                DOM.staveDisplayContainer.style.height = `${height}px`;
 
             } catch (error) {
                 console.error("Error dibuixant amb VexFlow:", error);
-                container.innerHTML = `<p class="text-red-500 text-center pt-8">Error de visualització musical: ${error.message}</p>`;
+                 container.innerHTML = `
+                    <div class="p-4 text-center text-gray-800">
+                        <p class="font-bold text-xl text-red-600">⚠️ Error de Visualització</p>
+                        <p class="text-sm mt-1">S'ha produït un error dibuixant l'interval. La lògica de joc continua.</p>
+                    </div>
+                 `;
             }
         }
 
@@ -358,14 +391,14 @@
             AppState.totalAttempts = 0;
             AppState.correctAnswers = 0;
 
-            // La direcció seleccionada es reseteja al valor per defecte del nivell
             AppState.selectedDirection = DIFFICULTY_CONFIG[difficultyKey].directions[0];
             
             DOM.difficultyDisplay.textContent = DIFFICULTY_CONFIG[difficultyKey].name;
             switchView('game');
-            generateButtons();
+            // Crida a la generació de botons NETA i específica del nivell
+            generateButtons(); 
             updateScoreDisplay(); 
-            nextInterval(); // Comença la primera ronda
+            nextInterval(); 
         }
 
         /** Genera una nova parella de notes (interval) aleatòria. */
@@ -384,7 +417,6 @@
 
             // 2. Calcula la nota inicial i final, assegurant que la nota final no surti del rang segur
             if (direction === 'descendente') {
-                // Si és descendent, la nota inicial ha de ser almenys l'interval per sobre del mínim
                 const safeMinStart = PITCH_RANGE_MIDI_MIN + intervalSemitones;
                 const actualMin = Math.max(MIN_NOTE_MIDI, safeMinStart);
                 const actualMax = MAX_NOTE_MIDI;
@@ -393,7 +425,6 @@
                 endNoteMIDI = startNoteMIDI - intervalSemitones;
 
             } else { // Ascendente
-                // Si és ascendent, la nota inicial ha de ser almenys l'interval per sota del màxim
                 const safeMaxStart = PITCH_RANGE_MIDI_MAX - intervalSemitones;
                 const actualMin = MIN_NOTE_MIDI;
                 const actualMax = Math.min(MAX_NOTE_MIDI, safeMaxStart);
@@ -404,7 +435,7 @@
 
             AppState.startNoteMIDI = startNoteMIDI;
             
-            // 3. Dibuixa l'interval
+            // 3. Dibuixa l'interval (aquesta funció ara té el mecanisme de fallback)
             const note1VF = midiToVexFlow(startNoteMIDI);
             const note2VF = midiToVexFlow(endNoteMIDI);
             drawInterval(note1VF, note2VF);
@@ -419,7 +450,7 @@
             AppState.isChecking = false;
             AppState.selectedInterval = null;
             
-            // La direcció ja està establerta a startGame, només cal establir l'estil
+            // Assegurar que la direcció seleccionada sigui una permesa pel nivell
             AppState.selectedDirection = DIFFICULTY_CONFIG[AppState.difficulty].directions[0]; 
 
             DOM.feedbackMessage.textContent = '';
@@ -438,7 +469,6 @@
                 }
             });
             
-            // Actualitza l'estat visual de la direcció
             setupDirectionButtons(); 
         }
 
@@ -448,9 +478,9 @@
             generateInterval();
         }
 
-        /** Habilita el botó de comprovar si l'usuari ha seleccionat un interval. */
+        /** Habilita el botó de comprovar si l'usuari ha seleccionat un interval i una direcció vàlida. */
         function enableCheckButton() {
-             if (!AppState.isChecking && AppState.selectedInterval !== null) {
+             if (!AppState.isChecking && AppState.selectedInterval !== null && AppState.selectedDirection !== null) {
                 DOM.btnCheck.disabled = false;
             } else {
                 DOM.btnCheck.disabled = true;
@@ -481,7 +511,8 @@
         /** Processa la selecció de direcció (ascendent/descendent). */
         function selectDirection(direction) {
             // Només si la dificultat ho permet
-            if (AppState.isChecking || DIFFICULTY_CONFIG[AppState.difficulty].directions.length === 1) return;
+            const configDirections = DIFFICULTY_CONFIG[AppState.difficulty].directions;
+            if (AppState.isChecking || configDirections.length === 1) return;
 
             AppState.selectedDirection = direction;
 
@@ -514,7 +545,7 @@
             const selectedInterval = AppState.selectedInterval;
             const selectedDirection = AppState.selectedDirection;
 
-            const correctIntervalName = INTERVAL_MAP.find(i => i.semitones === realInterval).btnName;
+            const correctIntervalName = getIntervalInfo(realInterval).btnName;
             const directionMap = { 'ascendente': 'Ascendent', 'descendente': 'Descendent' };
             const correctDirectionText = directionMap[realDirection];
 
@@ -632,12 +663,41 @@
         // 5. SETUP DE LA UI
         // =========================================================================
 
-        /** Genera els botons d'interval basats en INTERVAL_MAP. */
+        /** Genera els botons d'interval basats en la dificultat actual. */
         function generateButtons() {
             const container = DOM.intervalButtonsContainer;
             container.innerHTML = '';
+            
+            if (!AppState.difficulty) {
+                // No hauria de passar si startGame s'executa correctament, però és una seguretat.
+                console.error("Dificultat no seleccionada.");
+                return;
+            }
 
-            INTERVAL_MAP.forEach(interval => {
+            const allowedSemitones = DIFFICULTY_CONFIG[AppState.difficulty].semitones;
+            
+            // Filtra els intervals per la dificultat actual i els mapeja a la info completa
+            const allowedIntervals = INTERVAL_MAP.filter(interval => 
+                allowedSemitones.includes(interval.semitones)
+            );
+
+            // Determina el nombre de columnes per un layout net (fins a 4 columnes per a nivell inicial, 7 per a difícil)
+            const numIntervals = allowedIntervals.length;
+            let gridClass;
+            
+            if (numIntervals <= 5) {
+                 gridClass = 'grid-cols-2 sm:grid-cols-3'; // Menys opcions, més grans
+            } else if (numIntervals <= 8) {
+                 gridClass = 'grid-cols-3 sm:grid-cols-4'; // Nivell Inicial
+            } else {
+                 gridClass = 'grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7'; // Nivells Intermedi/Difícil
+            }
+            
+            // Actualitza la classe del contenidor de botons per la disposició responsiva
+            DOM.intervalButtonsContainer.className = `grid gap-3 ${gridClass}`;
+
+
+            allowedIntervals.forEach(interval => {
                 const btn = document.createElement('button');
                 btn.id = `interval-${interval.semitones}`;
                 btn.textContent = interval.btnName;
@@ -688,38 +748,37 @@
         };
 
         // =========================================================================
-        // 6. INICIALITZACIÓ I GESTIÓ DE CÀRREGA ASÍNCRONA
+        // 6. INICIALITZACIÓ
         // =========================================================================
 
-        /** Comprova la càrrega de VexFlow cada 100ms i habilita la UI quan està a punt. */
-        function waitForVexFlow() {
-            // Comprova la variable global Vex que la llibreria hauria d'exposar.
-            if (typeof Vex !== 'undefined') {
-                // VexFlow carregat! Habilita la UI
-                DOM.loadingIndicator.classList.add('hidden');
-                DOM.introContent.classList.remove('hidden');
-                // Mostra la pantalla d'inici amb els botons funcionals
-                switchView('start'); 
-            } else {
-                // Encara no, torna a intentar-ho
-                setTimeout(waitForVexFlow, 100); 
-            }
-        }
-
-        /** S'executa a DOMContentLoaded. Inicialitza l'aplicació i espera VexFlow. */
+        /** S'executa a DOMContentLoaded. Inicialitza l'aplicació i comprova VexFlow. */
         function init() {
             cacheDOMElements(); 
-            // Inicialment, assegura que només es vegi l'indicador de càrrega
-            DOM.startScreen.classList.remove('hidden');
-            DOM.introContent.classList.add('hidden');
-            DOM.loadingIndicator.classList.remove('hidden');
             
-            // Comença l'espera de VexFlow
-            waitForVexFlow();
+            // Comprova immediatament si la llibreria Vex s'ha carregat de manera asíncrona
+            if (typeof Vex !== 'undefined' && typeof Vex.Flow !== 'undefined') {
+                AppState.isVexFlowLoaded = true;
+                console.log("VexFlow (Notació Musical) carregat correctament.");
+            } else {
+                AppState.isVexFlowLoaded = false;
+                console.warn("VexFlow no detectat. El pentagrama no es dibuixarà, però la lògica de joc funcionarà.");
+            }
+            
+            // Inicia la UI principal sense esperar res
+            switchView('start'); 
         }
         
         // Utilitzem DOMContentLoaded per començar tan aviat com sigui possible.
         document.addEventListener('DOMContentLoaded', init);
+        
+        // També comprovem la càrrega de VexFlow una vegada finalitzada la finestra per si es carrega tard
+        window.addEventListener('load', () => {
+             if (!AppState.isVexFlowLoaded && typeof Vex !== 'undefined' && typeof Vex.Flow !== 'undefined') {
+                AppState.isVexFlowLoaded = true;
+                console.log("VexFlow carregat tardàment (load event).");
+            }
+        });
+
     </script>
 </body>
 </html>
