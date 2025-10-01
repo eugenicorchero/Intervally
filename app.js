@@ -748,8 +748,13 @@ function init() {
         console.warn("VexFlow no detectat. Intentant càrrega alternativa...");
         // Prova en cascada: v4, v4 min, v3 clàssic
         const fallbacks = [
+            // v4 jsDelivr
             'https://cdn.jsdelivr.net/npm/vexflow@4.2.3/build/vexflow.js',
             'https://cdn.jsdelivr.net/npm/vexflow@4.2.3/build/vexflow-min.js',
+            // v4 unpkg
+            'https://unpkg.com/vexflow@4.2.3/build/vexflow.js',
+            'https://unpkg.com/vexflow@4.2.3/build/vexflow-min.js',
+            // v3 classic
             'https://unpkg.com/vexflow@3.0.9/releases/vexflow-debug.js'
         ];
         attemptLoadVexFlowSequential(fallbacks).then(ns => {
