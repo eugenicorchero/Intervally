@@ -32,10 +32,10 @@ const DIFFICULTY_CONFIG = {
 const SEMITONE_NOTE_MAP = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
 const MIN_NOTE_MIDI = 57; // A3
-const MAX_NOTE_MIDI = 69; // A4 (reduït una octava)
+const MAX_NOTE_MIDI = 81; // A5 (pujat una octava)
 
 const PITCH_RANGE_MIDI_MIN = 45;
-const PITCH_RANGE_MIDI_MAX = 81; // reduït una octava
+const PITCH_RANGE_MIDI_MAX = 93; // pujat una octava
 
 const AppState = {
     difficulty: null,
@@ -286,6 +286,21 @@ function setupVexFlowRenderer(VF) {
     AppState.vexFlow = { renderer, context, stave, VF };
 
     window.addEventListener('resize', handleResize);
+    // Millora de responsivitat: ajusta l'SVG a l'amplada del contenidor
+    const svg = DOM.staveDisplayContainer.querySelector('svg');
+    if (svg) {
+        svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+        svg.style.width = '100%';
+        svg.style.height = 'auto';
+    }
+
+    // Reacciona a canvis de mida de contenidor
+    if (typeof ResizeObserver !== 'undefined') {
+        const ro = new ResizeObserver(() => handleResize());
+        ro.observe(DOM.staveContainer);
+        AppState.vexFlow.resizeObserver = ro;
+    }
+    window.addEventListener('orientationchange', () => setTimeout(handleResize, 200));
 }
 
 function drawInterval(note1VF, note2VF) {
@@ -751,9 +766,13 @@ function init() {
             // v4 jsDelivr
             'https://cdn.jsdelivr.net/npm/vexflow@4.2.3/build/vexflow.js',
             'https://cdn.jsdelivr.net/npm/vexflow@4.2.3/build/vexflow-min.js',
+            'https://cdn.jsdelivr.net/npm/vexflow@4.2.3/build/iife/vexflow.js',
+            'https://cdn.jsdelivr.net/npm/vexflow@4.2.3/build/iife/vexflow-min.js',
             // v4 unpkg
             'https://unpkg.com/vexflow@4.2.3/build/vexflow.js',
             'https://unpkg.com/vexflow@4.2.3/build/vexflow-min.js',
+            'https://unpkg.com/vexflow@4.2.3/build/iife/vexflow.js',
+            'https://unpkg.com/vexflow@4.2.3/build/iife/vexflow-min.js',
             // v3 classic
             'https://unpkg.com/vexflow@3.0.9/releases/vexflow-debug.js'
         ];
