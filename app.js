@@ -497,4 +497,4 @@ function init() {
     switchView('start');
 }
 
-window.onload = init;
+document.addEventListener('DOMContentLoaded', init);
