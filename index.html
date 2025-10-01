@@ -265,9 +265,15 @@
             return { key: `${noteName}/${octave}`, accidental: accidental };
         }
 
-        /** Dibuixa l'interval de dues notes usant VexFlow.
-         * Assumeix que VexFlow ja s'ha carregat correctament abans de ser cridada. */
+        /** Dibuixa l'interval de dues notes usant VexFlow. */
         function drawInterval(note1VF, note2VF) {
+            // Assegura't que VexFlow (VF) i Vex existeixin abans d'intentar utilitzar-los
+            if (typeof Vex === 'undefined' || typeof Vex.Flow === 'undefined') {
+                 console.error("VexFlow no està carregat. No es pot dibuixar l'interval.");
+                 DOM.staveDisplayContainer.innerHTML = `<p class="text-red-500 text-center pt-8">Error: No es pot carregar el pentagrama (VexFlow no disponible).</p>`;
+                 return;
+            }
+
             const container = DOM.staveDisplayContainer;
             container.innerHTML = ''; 
             
@@ -677,7 +683,8 @@
 
         /** Comprova la càrrega de VexFlow cada 100ms i habilita la UI quan està a punt. */
         function waitForVexFlow() {
-            if (typeof Vex !== 'undefined' && typeof Vex.Flow !== 'undefined') {
+            // COMPROVACIÓ CORREGIDA: Busquem la variable global Vex que la llibreria hauria d'exposar.
+            if (typeof Vex !== 'undefined') {
                 // VexFlow carregat! Habilita la UI
                 DOM.loadingIndicator.classList.add('hidden');
                 DOM.introContent.classList.remove('hidden');
