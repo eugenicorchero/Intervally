@@ -4,10 +4,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Intervally - Entrenador d'Intervals Musicals</title>
+    <title>Intervally - Entrenador Visual d'Intervals Musicals</title>
     <meta name="description" content="Una aplicació web per a aprendre i practicar intervals musicals de forma visual. Millora les teves habilitats de teoria musical amb exercicis interactius.">
     <!-- Càrrega de Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Càrrega de VexFlow -->
+    <script defer src="https://cdn.jsdelivr.net/npm/vexflow@4.2.3/build/vexflow.js"></script>
     <style>
         /* Estils Base i Rendiment */
         body {
@@ -69,7 +71,7 @@
 
         <header class="text-center mb-8 border-b border-blue-800 pb-4">
             <h1 class="text-4xl sm:text-5xl font-extrabold text-blue-400 tracking-tight">Intervally</h1>
-            <p class="text-gray-400 mt-1">Entrenador Visual d'Intervals Musicals</p>
+            <p class="text-gray-400 mt-1">Entrenador d'Intervals Musicals</p>
         </header>
 
         <section id="start-screen" class="text-center p-8 bg-gray-800 rounded-xl shadow-2xl transition duration-500">
@@ -88,7 +90,7 @@
                     <button id="btn-inicial" onclick="IntervallyApp.startGame('inicial')" aria-controls="game-screen"
                         class="p-6 bg-blue-700 hover:bg-blue-600 text-white font-semibold rounded-lg shadow-lg transition duration-300 transform hover:scale-[1.02] interval-button">
                         <span class="text-2xl block">Inicial</span>
-                        <span class="text-sm opacity-75 mt-1 block">(Ascendent: Uníson, 2a M, 3a M, 4a J, 5a J, 6a M, 7a M, 8a J)</span>
+                        <span class="text-sm opacity-75 mt-1 block">(Ascendent: Uníson, 2a M, 3a M, 4a J, 5a J, 6a M, 7a M, 8a J — sense sostinguts ni bemolls)</span>
                     </button>
                     <button id="btn-intermedio" onclick="IntervallyApp.startGame('intermedio')" aria-controls="game-screen"
                         class="p-6 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-lg shadow-lg transition duration-300 transform hover:scale-[1.02] interval-button">
@@ -157,8 +159,11 @@
         </section>
         
     </main>
-    
-    <script src="https://cdn.jsdelivr.net/npm/vexflow@4.2.3/build/vexflow.js"></script>
-    <script src="app.js"></script>
+
+    <footer class="w-full max-w-5xl mt-8 text-center text-gray-500 border-t border-gray-700 pt-4">
+        &copy; Eugeni Corchero 2025
+    </footer>
+
+    <script defer src="app.js"></script>
 </body>
 </html>
