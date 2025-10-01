@@ -28,7 +28,7 @@
             font-size: 1.5rem;
             font-weight: bold;
             transition: color 0.5s ease;
-            min-width: 40px; /* Evita CLS quan el temps baixa de 10 */
+            min-width: 40px; 
             text-align: right;
         }
         .score-display {
@@ -43,7 +43,7 @@
         /* Mida del contenidor de VexFlow, important per a CLS */
         #stave-container {
             min-height: 150px;
-            padding: 16px; /* Ajustat per visualització */
+            padding: 16px; 
         }
         #stave-display {
             width: 100%;
@@ -65,8 +65,13 @@
         <!-- PANTALLA INICIAL (Mostrada immediatament) -->
         <section id="start-screen" class="text-center p-8 bg-gray-800 rounded-xl shadow-2xl transition duration-500">
             
-            <!-- Contingut d'Introducció (Visible per defecte) -->
-            <div id="intro-content">
+            <!-- Indicador de Càrrega (Mostrat inicialment) -->
+            <div id="loading-indicator" class="p-8 text-xl font-semibold text-blue-400">
+                Carregant recursos musicals... 🎶
+            </div>
+
+            <!-- Contingut d'Introducció (Ocult inicialment per a esperar VexFlow) -->
+            <div id="intro-content" class="hidden">
                 <h2 class="text-3xl font-bold mb-6 text-white">Benvingut/da! Tria el teu Nivell de Pràctica</h2>
                 <p class="text-gray-300 mb-10 max-w-2xl mx-auto">
                     Practica la identificació d'intervals musicals de forma visual. Selecciona un nivell de dificultat per començar.
@@ -76,17 +81,17 @@
                     <button id="btn-inicial" onclick="IntervallyApp.startGame('inicial')"
                         class="p-6 bg-blue-700 hover:bg-blue-600 text-white font-semibold rounded-lg shadow-lg transition duration-300 transform hover:scale-[1.02] interval-button">
                         <span class="text-2xl block">Inicial</span>
-                        <span class="text-sm opacity-75 mt-1 block">(Només ascendent: Uníson, 2a M, 3a M, 4a J, 5a J, 6a M, 7a M)</span>
+                        <span class="text-sm opacity-75 mt-1 block">(Ascendent: Uníson, 2a M, 3a M, 4a J, 5a J, 6a M, 7a M)</span>
                     </button>
                     <button id="btn-intermedio" onclick="IntervallyApp.startGame('intermedio')"
                         class="p-6 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-lg shadow-lg transition duration-300 transform hover:scale-[1.02] interval-button">
                         <span class="text-2xl block">Intermedi</span>
-                        <span class="text-sm opacity-75 mt-1 block">(Només ascendent: Tots els 13 intervals)</span>
+                        <span class="text-sm opacity-75 mt-1 block">(Ascendent: Tots els intervals fins a 8a J)</span>
                     </button>
                     <button id="btn-dificil" onclick="IntervallyApp.startGame('dificil')"
                         class="p-6 bg-blue-500 hover:bg-blue-400 text-white font-semibold rounded-lg shadow-lg transition duration-300 transform hover:scale-[1.02] interval-button">
                         <span class="text-2xl block">Difícil</span>
-                        <span class="text-sm opacity-75 mt-1 block">(Ascendent/Descendent: Tots els 13 intervals)</span>
+                        <span class="text-sm opacity-75 mt-1 block">(Ascendent/Descendent: Tots els intervals fins a 8a J)</span>
                     </button>
                 </div>
             </div>
@@ -178,10 +183,13 @@
             { semitones: 12, name: '8a Justa', btnName: '8a J' },
         ];
 
-        // Configuració de la dificultat
+        // Configuració dels nivells de dificultat (Base de dades de distàncies)
         const DIFFICULTY_CONFIG = {
-            'inicial': { semitones: [0, 2, 4, 5, 7, 9, 11], directions: ['ascendente'], name: 'Inicial' },
+            // Inicial: Només intervals majors/justos/uníson i en direcció ascendent.
+            'inicial': { semitones: [0, 2, 4, 5, 7, 9, 11, 12], directions: ['ascendente'], name: 'Inicial' },
+            // Intermedi: Tots els intervals possibles, però només en direcció ascendent.
             'intermedio': { semitones: INTERVAL_MAP.map(i => i.semitones), directions: ['ascendente'], name: 'Intermedi' },
+            // Difícil: Tots els intervals possibles, en direcció ascendent i descendent.
             'dificil': { semitones: INTERVAL_MAP.map(i => i.semitones), directions: ['ascendente', 'descendente'], name: 'Difícil' }
         };
 
@@ -189,13 +197,13 @@
             'C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'
         ];
 
-        // Rang de notes central per als intervals
-        const MIN_NOTE_MIDI = 57; // A3
-        const MAX_NOTE_MIDI = 81; // A5
+        // Rang de notes central per als intervals (A3 a A5)
+        const MIN_NOTE_MIDI = 57; 
+        const MAX_NOTE_MIDI = 81; 
 
-        // Rang de notes segures (més ample) per assegurar que els intervals extrems es puguin dibuixar
-        const PITCH_RANGE_MIDI_MIN = 45; // A2 (Seguretat)
-        const PITCH_RANGE_MIDI_MAX = 93; // A6 (Seguretat)
+        // Rang de notes segures (A2 a A6) per assegurar que els intervals extrems es puguin dibuixar
+        const PITCH_RANGE_MIDI_MIN = 45; 
+        const PITCH_RANGE_MIDI_MAX = 93; 
 
         // Estat central de l'aplicació
         const AppState = {
@@ -204,7 +212,7 @@
             currentDirection: null,
             startNoteMIDI: null,
             selectedInterval: null,
-            selectedDirection: 'ascendente', // Valor per defecte
+            selectedDirection: 'ascendente', 
             timer: 30,
             timerId: null,
             isChecking: false,
@@ -219,6 +227,8 @@
             // Elements d'Inicialització 
             DOM.startScreen = document.getElementById('start-screen');
             DOM.gameScreen = document.getElementById('game-screen');
+            DOM.loadingIndicator = document.getElementById('loading-indicator');
+            DOM.introContent = document.getElementById('intro-content');
             
             // Elements de Joc
             DOM.difficultyDisplay = document.getElementById('current-difficulty');
@@ -255,21 +265,15 @@
             return { key: `${noteName}/${octave}`, accidental: accidental };
         }
 
-        /** Dibuixa l'interval de dues notes usant VexFlow. */
+        /** Dibuixa l'interval de dues notes usant VexFlow.
+         * Assumeix que VexFlow ja s'ha carregat correctament abans de ser cridada. */
         function drawInterval(note1VF, note2VF) {
             const container = DOM.staveDisplayContainer;
-            
-            // Comprovació de disponibilitat de VexFlow
-            if (typeof Vex === 'undefined' || typeof Vex.Flow === 'undefined') {
-                 container.innerHTML = `<p class="text-red-500 text-center pt-8">Error: La llibreria VexFlow no s'ha carregat. Si us plau, recarregueu la pàgina.</p>`;
-                 console.error("VexFlow no es troba definit.");
-                 return;
-            }
+            container.innerHTML = ''; 
             
             const VF = Vex.Flow;
 
             // 1. Neteja i Determinació de Mides
-            container.innerHTML = ''; 
             const width = Math.min(DOM.staveContainer.clientWidth - 32 || 600, 800); 
             const height = 150;
 
@@ -339,6 +343,9 @@
             AppState.difficulty = difficultyKey;
             AppState.totalAttempts = 0;
             AppState.correctAnswers = 0;
+
+            // La direcció seleccionada es reseteja al valor per defecte del nivell
+            AppState.selectedDirection = DIFFICULTY_CONFIG[difficultyKey].directions[0];
             
             DOM.difficultyDisplay.textContent = DIFFICULTY_CONFIG[difficultyKey].name;
             switchView('game');
@@ -351,6 +358,7 @@
         function generateInterval() {
             const config = DIFFICULTY_CONFIG[AppState.difficulty];
 
+            // 1. Selecciona aleatòriament els semitons i la direcció de la llista per al nivell
             const intervalSemitones = config.semitones[Math.floor(Math.random() * config.semitones.length)];
             const direction = config.directions[Math.floor(Math.random() * config.directions.length)];
             
@@ -360,9 +368,8 @@
             let startNoteMIDI;
             let endNoteMIDI;
 
-            // La lògica de generació assegura que la nota final no surti del rang PITCH_RANGE_MIDI_MAX/MIN
+            // 2. Calcula la nota inicial i final, assegurant que la nota final no surti del rang segur
             if (direction === 'descendente') {
-                // Mínim de la nota inicial (startNoteMIDI) ha de ser prou alt per permetre la baixada
                 const safeMinStart = PITCH_RANGE_MIDI_MIN + intervalSemitones;
                 const actualMin = Math.max(MIN_NOTE_MIDI, safeMinStart);
                 const actualMax = MAX_NOTE_MIDI;
@@ -371,7 +378,6 @@
                 endNoteMIDI = startNoteMIDI - intervalSemitones;
 
             } else { // Ascendente
-                // Màxim de la nota inicial (startNoteMIDI) ha de ser prou baix per permetre la pujada
                 const safeMaxStart = PITCH_RANGE_MIDI_MAX - intervalSemitones;
                 const actualMin = MIN_NOTE_MIDI;
                 const actualMax = Math.min(MAX_NOTE_MIDI, safeMaxStart);
@@ -382,11 +388,12 @@
 
             AppState.startNoteMIDI = startNoteMIDI;
             
-            // Dibuixa i inicialitza la UI per a la nova ronda
+            // 3. Dibuixa l'interval
             const note1VF = midiToVexFlow(startNoteMIDI);
             const note2VF = midiToVexFlow(endNoteMIDI);
             drawInterval(note1VF, note2VF);
 
+            // 4. Reinicia la UI i el temporitzador
             resetUI();
             startTimer(); 
         }
@@ -396,7 +403,7 @@
             AppState.isChecking = false;
             AppState.selectedInterval = null;
             
-            // Reiniciem la direcció seleccionada a la direcció per defecte de la dificultat
+            // La direcció ja està establerta a startGame, només cal establir l'estil
             AppState.selectedDirection = DIFFICULTY_CONFIG[AppState.difficulty].directions[0]; 
 
             DOM.feedbackMessage.textContent = '';
@@ -415,7 +422,7 @@
                 }
             });
             
-            // Actualitza l'estat visual de la direcció, basant-se en l'estat acabat de restablir
+            // Actualitza l'estat visual de la direcció
             setupDirectionButtons(); 
         }
 
@@ -633,7 +640,7 @@
                 DOM.btnDescendente.classList.remove('direction-disabled', 'opacity-50', 'bg-gray-500');
                 DOM.btnDescendente.disabled = false;
                 
-                // Aplica l'estil al botó actualment seleccionat (després del reset)
+                // Aplica l'estil al botó actualment seleccionat 
                 const selectedDirectionBtn = AppState.selectedDirection === 'ascendente' ? DOM.btnAscendente : DOM.btnDescendente;
                 const otherDirectionBtn = AppState.selectedDirection === 'ascendente' ? DOM.btnDescendente : DOM.btnAscendente;
 
@@ -665,14 +672,33 @@
         };
 
         // =========================================================================
-        // 6. INICIALITZACIÓ (CÀRREGA INSTANTÀNIA)
+        // 6. INICIALITZACIÓ I GESTIÓ DE CÀRREGA ASÍNCRONA
         // =========================================================================
 
-        /** S'executa a DOMContentLoaded. Inicialitza l'aplicació mostrant la pantalla d'inici directament. */
+        /** Comprova la càrrega de VexFlow cada 100ms i habilita la UI quan està a punt. */
+        function waitForVexFlow() {
+            if (typeof Vex !== 'undefined' && typeof Vex.Flow !== 'undefined') {
+                // VexFlow carregat! Habilita la UI
+                DOM.loadingIndicator.classList.add('hidden');
+                DOM.introContent.classList.remove('hidden');
+                // Mostra la pantalla d'inici amb els botons funcionals
+                switchView('start'); 
+            } else {
+                // Encara no, torna a intentar-ho
+                setTimeout(waitForVexFlow, 100); 
+            }
+        }
+
+        /** S'executa a DOMContentLoaded. Inicialitza l'aplicació i espera VexFlow. */
         function init() {
             cacheDOMElements(); 
-            // Mostrem la pantalla d'inici directament.
-            switchView('start'); 
+            // Inicialment, assegura que només es vegi l'indicador de càrrega
+            DOM.startScreen.classList.remove('hidden');
+            DOM.introContent.classList.add('hidden');
+            DOM.loadingIndicator.classList.remove('hidden');
+            
+            // Comença l'espera de VexFlow
+            waitForVexFlow();
         }
         
         // Utilitzem DOMContentLoaded per començar tan aviat com sigui possible.
