@@ -185,21 +185,19 @@
 
         // Configuració dels nivells de dificultat (Base de dades de distàncies)
         const DIFFICULTY_CONFIG = {
-            // Inicial: Només intervals majors/justos/uníson i en direcció ascendent.
             'inicial': { semitones: [0, 2, 4, 5, 7, 9, 11, 12], directions: ['ascendente'], name: 'Inicial' },
-            // Intermedi: Tots els intervals possibles, però només en direcció ascendent.
             'intermedio': { semitones: INTERVAL_MAP.map(i => i.semitones), directions: ['ascendente'], name: 'Intermedi' },
-            // Difícil: Tots els intervals possibles, en direcció ascendent i descendent.
             'dificil': { semitones: INTERVAL_MAP.map(i => i.semitones), directions: ['ascendente', 'descendente'], name: 'Difícil' }
         };
 
+        // Mapeig d'índexs de semitons a noms de nota (només utilitzant sostinguts)
         const SEMITONE_NOTE_MAP = [
             'C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'
         ];
 
         // Rang de notes central per als intervals (A3 a A5)
-        const MIN_NOTE_MIDI = 57; 
-        const MAX_NOTE_MIDI = 81; 
+        const MIN_NOTE_MIDI = 57; // A3
+        const MAX_NOTE_MIDI = 81; // A5
 
         // Rang de notes segures (A2 a A6) per assegurar que els intervals extrems es puguin dibuixar
         const PITCH_RANGE_MIDI_MIN = 45; 
@@ -247,7 +245,7 @@
 
 
         // =========================================================================
-        // 2. FUNCIONS DE VEXFLOW I UTILITAT MUSICAL
+        // 2. FUNCIONS DE VEXFLOW I UTILITAT MUSICAL (REFRACTORITZAT)
         // =========================================================================
         
         /** Converteix una nota MIDI a l'estructura de VexFlow (p. ex., { key: 'C/4', accidental: '#' }) */
@@ -257,17 +255,17 @@
             let noteName = SEMITONE_NOTE_MAP[semi];
             let accidental = '';
 
+            // Si la nota té un # (per exemple, C#), separem la nota base (C) de l'accidental (#)
             if (noteName.length > 1) {
-                accidental = noteName.substring(1);
-                noteName = noteName.substring(0, 1);
+                accidental = noteName.substring(1); // #
+                noteName = noteName.substring(0, 1); // C
             }
 
             return { key: `${noteName}/${octave}`, accidental: accidental };
         }
 
-        /** Dibuixa l'interval de dues notes usant VexFlow. */
+        /** Dibuixa l'interval de dues notes usant VexFlow (Implementació robusta). */
         function drawInterval(note1VF, note2VF) {
-            // Assegura't que VexFlow (VF) i Vex existeixin abans d'intentar utilitzar-los
             if (typeof Vex === 'undefined' || typeof Vex.Flow === 'undefined') {
                  console.error("VexFlow no està carregat. No es pot dibuixar l'interval.");
                  DOM.staveDisplayContainer.innerHTML = `<p class="text-red-500 text-center pt-8">Error: No es pot carregar el pentagrama (VexFlow no disponible).</p>`;
@@ -284,33 +282,43 @@
             const height = 150;
 
             try {
-                // 2. Inicialitzar Factory
-                const factory = new VF.Factory({ 
-                    renderer: { 
-                        elementId: 'stave-display', 
-                        width: width, 
-                        height: height 
-                    } 
-                });
-                const score = factory.EasyScore();
-                const system = factory.System();
+                // 2. Inicialitzar Renderer i Context
+                // Utilitzem SVG per a una millor escalabilitat i rendiment al web
+                const renderer = new VF.Renderer(container, VF.Renderer.Backends.SVG);
+                renderer.resize(width, height);
+                const context = renderer.getContext();
+                context.setFont('Arial', 10);
+                context.clear(); 
 
-                const note1Key = note1VF.key;
-                const note2Key = note2VF.key;
+                // 3. Crear Pentagrama (Stave)
+                // Offset de 10px a l'esquerra per marge i 20px de marge dret
+                const stave = new VF.Stave(10, 0, width - 20); 
+                stave.addClef('treble').addTimeSignature('4/4');
+                stave.setContext(context).draw();
+
+                // 4. Crear les Notes (StaveNote)
+                const notes = [
+                    new VF.StaveNote({ clef: 'treble', keys: [note1VF.key], duration: 'q' }),
+                    new VF.StaveNote({ clef: 'treble', keys: [note2VF.key], duration: 'q' })
+                ];
+
+                // Afegir accidentals si cal. VexFlow s'encarrega de dibuixar-los.
+                if (note1VF.accidental) {
+                    notes[0].addAccidental(0, new VF.Accidental(note1VF.accidental));
+                }
+                if (note2VF.accidental) {
+                    notes[1].addAccidental(0, new VF.Accidental(note2VF.accidental));
+                }
+
+                // 5. Crear Veu (Voice)
+                const voice = new VF.Voice({ num_beats: 2, beat_value: 4 }).addTickables(notes);
+
+                // 6. Formatar i Dibuixar
+                // Formateja les veus i determina la posició horizontal de les notes
+                new VF.Formatter().joinVoices([voice]).format([voice], width - 40); 
                 
-                // 3. Crear Veu amb dues notes de negra (quarter note 'q') en clau de Sol
-                const voice = score.voice(score.notes(`${note1Key}/q, ${note2Key}/q`, { clef: 'treble' }));
-
-                // 4. Afegir accidentals si existeixen
-                if (note1VF.accidental) voice.getTickables()[0].addAccidental(0, new VF.Accidental(note1VF.accidental));
-                if (note2VF.accidental) voice.getTickables()[1].addAccidental(0, new VF.Accidental(note2VF.accidental));
-
-                // 5. Configurar i Dibuixar el Pentagrama
-                system.addStave({
-                    voices: [voice],
-                }).addClef('treble').addTimeSignature('4/4');
-
-                factory.draw();
+                // Dibuixa les notes al pentagrama
+                voice.draw(context, stave);
 
             } catch (error) {
                 console.error("Error dibuixant amb VexFlow:", error);
@@ -376,6 +384,7 @@
 
             // 2. Calcula la nota inicial i final, assegurant que la nota final no surti del rang segur
             if (direction === 'descendente') {
+                // Si és descendent, la nota inicial ha de ser almenys l'interval per sobre del mínim
                 const safeMinStart = PITCH_RANGE_MIDI_MIN + intervalSemitones;
                 const actualMin = Math.max(MIN_NOTE_MIDI, safeMinStart);
                 const actualMax = MAX_NOTE_MIDI;
@@ -384,6 +393,7 @@
                 endNoteMIDI = startNoteMIDI - intervalSemitones;
 
             } else { // Ascendente
+                // Si és ascendent, la nota inicial ha de ser almenys l'interval per sota del màxim
                 const safeMaxStart = PITCH_RANGE_MIDI_MAX - intervalSemitones;
                 const actualMin = MIN_NOTE_MIDI;
                 const actualMax = Math.min(MAX_NOTE_MIDI, safeMaxStart);
@@ -456,13 +466,13 @@
             // Gestiona l'estil de selecció (un sol botó seleccionat)
             document.querySelectorAll('.interval-button-choice').forEach(btn => {
                 btn.classList.remove('bg-blue-400', 'ring-2', 'ring-offset-2', 'ring-blue-400');
-                btn.classList.add('bg-gray-700');
+                btn.classList.add('bg-gray-700', 'hover:bg-gray-600');
             });
 
             const selectedBtn = document.getElementById(`interval-${semitones}`);
             if (selectedBtn) {
                 selectedBtn.classList.add('bg-blue-400', 'ring-2', 'ring-offset-2', 'ring-blue-400');
-                selectedBtn.classList.remove('bg-gray-700');
+                selectedBtn.classList.remove('bg-gray-700', 'hover:bg-gray-600');
             }
 
             enableCheckButton();
@@ -683,7 +693,7 @@
 
         /** Comprova la càrrega de VexFlow cada 100ms i habilita la UI quan està a punt. */
         function waitForVexFlow() {
-            // COMPROVACIÓ CORREGIDA: Busquem la variable global Vex que la llibreria hauria d'exposar.
+            // Comprova la variable global Vex que la llibreria hauria d'exposar.
             if (typeof Vex !== 'undefined') {
                 // VexFlow carregat! Habilita la UI
                 DOM.loadingIndicator.classList.add('hidden');
