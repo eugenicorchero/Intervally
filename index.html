@@ -67,7 +67,7 @@
             <h2 class="text-3xl font-bold mb-6 text-white">Benvingut/da! Tria el teu Nivell de Pràctica</h2>
             <p class="text-gray-300 mb-10 max-w-2xl mx-auto">
                 Practica la identificació d'intervals musicals de forma visual. Selecciona un nivell de dificultat per començar.
-                Recorda que tens 30 segons per a cada resposta. Molta sort!
+                Recorda que tens 30 segons per a cada resposta.
             </p>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <button onclick="IntervallyApp.startGame('inicial')"
@@ -91,11 +91,11 @@
         <!-- PANTALLA DE PRÀCTICA -->
         <section id="game-screen" class="hidden flex flex-col space-y-6 p-4">
 
-            <!-- Display del Temporitzador, Dificultat i Puntuació (NOU FORMAT) -->
+            <!-- Display del Temporitzador, Dificultat i Puntuació -->
             <div class="flex flex-col sm:flex-row justify-between items-center px-2 py-3 bg-gray-800 rounded-lg shadow-inner gap-4">
                 <div class="text-lg text-gray-400">Dificultat: <span id="current-difficulty" class="font-semibold text-blue-300"></span></div>
                 
-                <!-- NOU: Puntuació -->
+                <!-- Puntuació -->
                 <div class="score-display text-lg text-gray-400">
                     Puntuació: <span id="score-correct" class="font-semibold text-green-400">0</span> / <span id="score-total" class="font-semibold text-white">0</span>
                 </div>
@@ -183,15 +183,15 @@
             'C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'
         ];
 
-        // Rango de notas central (A3 a A5)
+        // Rang de notes central (A3 a A5)
         const MIN_NOTE_MIDI = 57; // A3
         const MAX_NOTE_MIDI = 81; // A5
 
-        // Rango de notas seguras que VexFlow pot dibuixar sense problemes extrems (A2 a A6)
+        // Rang de notes segures que VexFlow pot dibuixar sense problemes extrems (A2 a A6)
         const PITCH_RANGE_MIDI_MIN = 57 - 12; // A2 (una octava sota el mínim central)
         const PITCH_RANGE_MIDI_MAX = 81 + 12; // A6 (una octava sobre el màxim central)
 
-        // Estado central de la aplicación
+        // Estat central de l'aplicació
         const AppState = {
             difficulty: null,
             currentIntervalSemitones: null,
@@ -202,7 +202,6 @@
             timer: 30,
             timerId: null,
             isChecking: false,
-            // NOU: Comptadors
             totalAttempts: 0,
             correctAnswers: 0,
         };
@@ -223,13 +222,12 @@
             DOM.btnCheck = document.getElementById('btn-check');
             DOM.btnNext = document.getElementById('btn-next');
             DOM.timerDisplay = document.getElementById('timer-display');
-            // NOU: Cache de puntuació
             DOM.scoreCorrect = document.getElementById('score-correct');
             DOM.scoreTotal = document.getElementById('score-total');
         }
 
         // =========================================================================
-        // 2. FUNCIONS DE VEXFLOW I UTILITAT MUSICAL
+        // 2. FUNCIONS DE VEXFLOW I UTILITAT MUSICAL (COMPROVACIÓ SEGONS DOCS VEXFLOW)
         // =========================================================================
 
         /** Converteix una nota MIDI al seu format VexFlow (p. ex., 'C#/4') */
@@ -244,25 +242,32 @@
                 noteName = noteName.substring(0, 1);
             }
 
-            // VexFlow espera 'n' per a notes sense alteració (p. ex. C) si no hi ha accidental
             return { key: `${noteName}/${octave}`, accidental: accidental };
         }
 
         /** Dibuixa l'interval usant VexFlow. */
         function drawInterval(note1VF, note2VF) {
-            const container = DOM.staveDisplayContainer; // #stave-display
+            const container = DOM.staveDisplayContainer;
             if (!container) return;
 
-            // 1. Neteja: Eliminar qualsevol contingut anterior (SVG o Canvas)
+            // 1. Comprovació d'existència de VexFlow i assignació de l'espai de noms (VF)
+            if (typeof Vex === 'undefined' || !Vex.Flow) {
+                 container.innerHTML = `<p class="text-red-500 text-center pt-8">Error: La llibreria musical VexFlow no s'ha carregat correctament.</p>`;
+                 console.error("VexFlow no está definido. Comprova la càrrega del script.");
+                 return;
+            }
+            const VF = Vex.Flow;
+
+            // 2. Neteja del contenidor anterior
             container.innerHTML = ''; 
 
-            // 2. Determinar mides: Obtenir l'amplada del contenidor pare (#stave-container)
+            // 3. Determinar mides (fa que el pentagrama sigui responsive)
             const width = Math.min(DOM.staveContainer.clientWidth - 32 || 600, 800); 
             const height = 150;
 
             try {
-                // 3. Inicialitzar Factory (recrea l'SVG/Canvas dins de 'stave-display')
-                const factory = new Vex.Flow.Factory({ 
+                // 4. Inicialitzar Factory (Patró recomanat per VexFlow)
+                const factory = new VF.Factory({ 
                     renderer: { 
                         elementId: 'stave-display', 
                         width: width, 
@@ -275,30 +280,31 @@
                 const note1Key = note1VF.key;
                 const note2Key = note2VF.key;
                 
-                // 4. Crear Veu i Notes
+                // 5. Crear Veu i Notes amb EasyScore (sempre en clau de Sol)
                 const voice = score.voice(score.notes(`${note1Key}/q, ${note2Key}/q`, { clef: 'treble' }));
 
-                // 5. Afegir accidentals
-                if (note1VF.accidental) voice.getTickables()[0].addAccidental(0, new Vex.Flow.Accidental(note1VF.accidental));
-                if (note2VF.accidental) voice.getTickables()[1].addAccidental(0, new Vex.Flow.Accidental(note2VF.accidental));
+                // 6. Afegir accidentals manualment si cal (Utilitzant VF.Accidental)
+                // Es fa sobre els 'Tickables' per assegurar-ne la correcta col·locació.
+                if (note1VF.accidental) voice.getTickables()[0].addAccidental(0, new VF.Accidental(note1VF.accidental));
+                if (note2VF.accidental) voice.getTickables()[1].addAccidental(0, new VF.Accidental(note2VF.accidental));
 
-                // 6. Dibuixar Pentagrama i Notes
+                // 7. Configurar i Dibuixar el Pentagrama (Stave)
                 system.addStave({
                     voices: [voice],
                 }).addClef('treble').addTimeSignature('4/4');
 
-                factory.draw();
+                factory.draw(); // Dibuixa tot el sistema
 
             } catch (error) {
                 console.error("Error dibuixant amb VexFlow:", error);
                 // Fallback per visualitzar errors
-                container.innerHTML = `<p class="text-red-500 text-center pt-8">Error de visualització musical. (${error.message})</p>`;
+                container.innerHTML = `<p class="text-red-500 text-center pt-8">Error de visualització musical: ${error.message}</p>`;
             }
         }
 
 
         // =========================================================================
-        // 3. LÒGICA DE JOC
+        // 3. LÒGICA DE JOC (FLUX: ESCOLLIR > COMPROVAR > SEGÜENT)
         // =========================================================================
 
         /** Navega entre vistes (Optimitzat amb elements cachejats) */
@@ -313,7 +319,7 @@
             }
         }
 
-        /** NOU: Actualitza la visualització de la puntuació */
+        /** Actualitza la visualització de la puntuació */
         function updateScoreDisplay() {
             if (DOM.scoreCorrect && DOM.scoreTotal) {
                 DOM.scoreCorrect.textContent = AppState.correctAnswers;
@@ -332,7 +338,7 @@
             generateButtons();
             updateScoreDisplay(); // Mostra puntuació inicial (0/0)
             setupDirectionButtons();
-            nextInterval();
+            nextInterval(); // Inicia el primer interval
         }
 
         /** Genera un nou interval aleatori (Lògica robusta per límits MIDI) */
@@ -384,7 +390,7 @@
 
             // 4. Configurar UI i Timer
             resetUI();
-            startTimer();
+            startTimer(); // El rellotge comença quan es genera un nou interval
         }
 
         /** Reinicia l'estat del UI */
@@ -397,7 +403,7 @@
             DOM.btnCheck.disabled = true;
             DOM.btnNext.disabled = true;
 
-            // Resetear color y clases de todos los botones de respuesta
+            // Resetear color y clases de todos los botons de resposta
             document.querySelectorAll('.interval-button-choice, #btn-ascendente, #btn-descendente').forEach(btn => {
                 btn.disabled = false;
                 btn.classList.remove('bg-blue-400', 'bg-green-600', 'bg-red-600', 'ring-2', 'ring-offset-2', 'ring-blue-400', 'ring-green-600', 'ring-red-600', 'direction-disabled', 'opacity-50');
@@ -410,7 +416,7 @@
             });
             
             // Seleccionar visualment la direcció per defecte
-            setupDirectionButtons(true); // Passa true per forçar la selecció visual inicial
+            setupDirectionButtons(true); 
         }
 
         /** Passa al següent interval */
@@ -421,6 +427,7 @@
 
         /** Habilita el botó de comprovar si l'interval s'ha seleccionat */
         function enableCheckButton() {
+             // El botó de Comprova s'habilita només si s'ha seleccionat un interval
              if (!AppState.isChecking && AppState.selectedInterval !== null) {
                 DOM.btnCheck.disabled = false;
             } else {
@@ -430,6 +437,8 @@
 
         /** Selecciona l'interval i actualitza l'estat */
         function selectInterval(semitones) {
+            if (AppState.isChecking) return; 
+
             AppState.selectedInterval = semitones;
 
             // Desmarcar tots els botons i marcar el seleccionat
@@ -449,18 +458,22 @@
 
         /** Selecciona la direcció i actualitza l'estat */
         function selectDirection(direction) {
-            if (DIFFICULTY_CONFIG[AppState.difficulty].directions.length === 1) return;
+            if (AppState.isChecking || DIFFICULTY_CONFIG[AppState.difficulty].directions.length === 1) return;
 
             AppState.selectedDirection = direction;
 
+            // Reset de visualització
             DOM.btnAscendente.classList.remove('bg-blue-400', 'ring-2', 'ring-offset-2', 'ring-blue-400');
             DOM.btnDescendente.classList.remove('bg-blue-400', 'ring-2', 'ring-offset-2', 'ring-blue-400');
 
-            if (direction === 'ascendente') {
-                DOM.btnAscendente.classList.add('bg-blue-400', 'ring-2', 'ring-offset-2', 'ring-blue-400');
-            } else {
-                DOM.btnDescendente.classList.add('bg-blue-400', 'ring-2', 'ring-offset-2', 'ring-blue-400');
-            }
+            // Selecció visual
+            const targetBtn = direction === 'ascendente' ? DOM.btnAscendente : DOM.btnDescendente;
+            targetBtn.classList.add('bg-blue-400', 'ring-2', 'ring-offset-2', 'ring-blue-400');
+            targetBtn.classList.remove('bg-gray-600', 'hover:bg-gray-500');
+
+            const otherBtn = direction === 'ascendente' ? DOM.btnDescendente : DOM.btnAscendente;
+            otherBtn.classList.remove('bg-blue-400', 'ring-2', 'ring-offset-2', 'ring-blue-400');
+            otherBtn.classList.add('bg-gray-600', 'hover:bg-gray-500');
 
             enableCheckButton();
         }
@@ -469,9 +482,9 @@
         function checkAnswer() {
             if (AppState.isChecking) return;
             AppState.isChecking = true;
-            stopTimer(); // El temporitzador s'atura quan es comprova!
+            stopTimer(); // El rellotge s'atura quan es comprova!
 
-            // Actualització de puntuació (NOU)
+            // Actualització de puntuació 
             AppState.totalAttempts++;
 
             const realInterval = AppState.currentIntervalSemitones;
@@ -483,10 +496,10 @@
             const directionMap = { 'ascendente': 'Ascendent', 'descendente': 'Descendent' };
             const correctDirectionText = directionMap[realDirection];
 
-            let isDirectionChecked = DIFFICULTY_CONFIG[AppState.difficulty].directions.length > 1;
-            let isIntervalCorrect = selectedInterval === realInterval;
-            let isDirectionCorrect = !isDirectionChecked || (selectedDirection === realDirection);
-            let isCorrect = isIntervalCorrect && isDirectionCorrect;
+            const isDirectionChecked = DIFFICULTY_CONFIG[AppState.difficulty].directions.length > 1;
+            const isIntervalCorrect = selectedInterval === realInterval;
+            const isDirectionCorrect = !isDirectionChecked || (selectedDirection === realDirection);
+            const isCorrect = isIntervalCorrect && isDirectionCorrect;
 
             if (isCorrect) {
                 AppState.correctAnswers++; // Suma encert
@@ -494,18 +507,19 @@
                 DOM.feedbackMessage.classList.remove('text-red-500');
                 DOM.feedbackMessage.classList.add('text-green-500');
 
+                // Resaltar resposta correcta (verd)
                 const correctBtn = document.getElementById(`interval-${realInterval}`);
                 if (correctBtn) {
                     correctBtn.classList.remove('bg-blue-400', 'bg-gray-700', 'ring-blue-400');
                     correctBtn.classList.add('bg-green-600');
                 }
             } else {
-                // Si el temps s'ha esgotat, el selectedInterval és null o -1 (després del reset)
+                // Si el temps s'esgota, selectedInterval és null
                 let message;
-                if (selectedInterval === null || selectedInterval === -1) {
-                    message = `TEMPS ESGOTAT. L'interval real era: ${correctIntervalName}`;
+                if (selectedInterval === null) {
+                    message = `TEMPS ESGOTAT. L'interval correcte era: ${correctIntervalName}`;
                 } else {
-                    message = `INCORRECTE. L'interval real era: ${correctIntervalName}`;
+                    message = `INCORRECTE. L'interval correcte era: ${correctIntervalName}`;
                 }
                 
                 if (isDirectionChecked) {
@@ -518,7 +532,7 @@
                 DOM.feedbackMessage.classList.remove('text-green-500');
                 DOM.feedbackMessage.classList.add('text-red-500');
                 
-                // Resaltar resposta correcta (verd)
+                // Resaltar resposta correcta (verd, per mostrar la solució)
                 const correctBtn = document.getElementById(`interval-${realInterval}`);
                 if (correctBtn) {
                     correctBtn.classList.remove('bg-blue-400', 'bg-gray-700', 'ring-blue-400');
@@ -527,7 +541,7 @@
 
                 // Resaltar resposta incorrecta de l'usuari (vermell)
                 const selectedBtn = document.getElementById(`interval-${selectedInterval}`);
-                if (selectedBtn && selectedInterval !== realInterval && selectedInterval !== -1) {
+                if (selectedBtn && selectedInterval !== realInterval && selectedInterval !== null) {
                      selectedBtn.classList.remove('bg-blue-400', 'ring-blue-400');
                      selectedBtn.classList.add('bg-red-600', 'ring-red-600', 'ring-2', 'ring-offset-2');
                 }
@@ -538,8 +552,11 @@
                     document.getElementById(`btn-${realDirection}`).classList.add('bg-green-600', 'ring-green-600', 'ring-2', 'ring-offset-2');
                     
                     if (selectedDirection !== realDirection) {
-                        document.getElementById(`btn-${selectedDirection}`).classList.remove('bg-blue-400', 'ring-blue-400');
-                        document.getElementById(`btn-${selectedDirection}`).classList.add('bg-red-600', 'ring-red-600', 'ring-2', 'ring-offset-2');
+                        // Només marcar en vermell si l'usuari havia seleccionat l'altra direcció
+                        if (selectedDirection !== DIFFICULTY_CONFIG[AppState.difficulty].directions[0] || realDirection !== DIFFICULTY_CONFIG[AppState.difficulty].directions[0]) {
+                            document.getElementById(`btn-${selectedDirection}`).classList.remove('bg-blue-400', 'ring-blue-400');
+                            document.getElementById(`btn-${selectedDirection}`).classList.add('bg-red-600', 'ring-red-600', 'ring-2', 'ring-offset-2');
+                        }
                     }
                 }
             }
@@ -548,11 +565,12 @@
             updateScoreDisplay();
             DOM.btnCheck.disabled = true;
             DOM.btnNext.disabled = false;
+            // Deshabilita tots els botons de resposta/direcció per evitar canvis post-comprovació
             document.querySelectorAll('.interval-button-choice, #btn-ascendente, #btn-descendente').forEach(btn => btn.disabled = true);
         }
 
         // =========================================================================
-        // 4. LÒGICA DEL TEMPORITZADOR (REVISADA)
+        // 4. LÒGICA DEL TEMPORITZADOR (FLUX: COMENÇA > S'ATURA A COMPROVAR > COMENÇA A SEGÜENT)
         // =========================================================================
 
         function startTimer() {
@@ -620,16 +638,17 @@
                 DOM.btnDescendente.classList.remove('direction-disabled', 'opacity-50', 'bg-gray-500');
                 DOM.btnDescendente.disabled = false;
                 
-                // Aplicar l'estil actiu a la direcció inicial (Ascendent) només si es reinicia la visualització
-                if (resetVisual) {
+                // Aplicar l'estil actiu a la direcció inicial (Ascendent)
+                if (resetVisual || AppState.selectedDirection === 'ascendente') {
                     DOM.btnAscendente.classList.remove('bg-gray-600', 'hover:bg-gray-500');
                     DOM.btnAscendente.classList.add('bg-blue-400', 'ring-2', 'ring-offset-2', 'ring-blue-400');
-                    DOM.btnDescendente.classList.add('bg-gray-600', 'hover:bg-gray-500'); // Assegura que l'altre estigui desmarcat
+                    DOM.btnDescendente.classList.add('bg-gray-600', 'hover:bg-gray-500'); 
+                    DOM.btnDescendente.classList.remove('bg-blue-400', 'ring-2', 'ring-offset-2', 'ring-blue-400'); 
                 }
             } else {
                 // Deshabilita Descendent i força Ascendent visualment
                 DOM.btnDescendente.classList.add('direction-disabled', 'opacity-50', 'bg-gray-500');
-                DOM.btnDescendente.classList.remove('bg-gray-600', 'hover:bg-gray-500');
+                DOM.btnDescendente.classList.remove('bg-gray-600', 'hover:bg-gray-500', 'bg-blue-400', 'ring-2', 'ring-offset-2', 'ring-blue-400');
                 DOM.btnDescendente.disabled = true;
 
                 // Assegura que Ascendent estigui seleccionat per defecte i amb estil actiu
