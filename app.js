@@ -12,7 +12,7 @@ const INTERVAL_MAP = [
     { semitones: 3, name: '3a menor', btnName: '3a m' },
     { semitones: 4, name: '3a major', btnName: '3a M' },
     { semitones: 5, name: '4a Justa', btnName: '4a J' },
-    { semitones: 6, name: 'Tritó', btnName: 'Tritó' },
+    { semitones: 6, name: 'Tritò', btnName: 'Tritò' },
     { semitones: 7, name: '5a Justa', btnName: '5a J' },
     { semitones: 8, name: '6a menor', btnName: '6a m' },
     { semitones: 9, name: '6a major', btnName: '6a M' },
