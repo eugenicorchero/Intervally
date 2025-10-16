@@ -51,11 +51,14 @@ const ENHARMONIC_MAP = {
 const SHARP_KEYS = ['C', 'G', 'D', 'A', 'E', 'B', 'F#', 'C#'];
 const FLAT_KEYS = ['F', 'Bb', 'Eb', 'Ab', 'Db', 'Gb', 'Cb'];
 
-const MIN_NOTE_MIDI = 57; // A3
-const MAX_NOTE_MIDI = 81; // A5
+// Treble clef comfortable reading range: C4 to A5
+// C4 = MIDI 60, A5 = MIDI 81
+// This keeps notes within one line above/below the staff
+const MIN_NOTE_MIDI = 60; // C4 (one line below staff)
+const MAX_NOTE_MIDI = 81; // A5 (one line above staff)
 
-const PITCH_RANGE_MIDI_MIN = 45; // A2 (for safety margin)
-const PITCH_RANGE_MIDI_MAX = 93; // A6 (for safety margin)
+const PITCH_RANGE_MIDI_MIN = 48; // C3 (for safety margin)
+const PITCH_RANGE_MIDI_MAX = 84; // C6 (for safety margin)
 
 const AppState = {
     difficulty: null,
