@@ -174,7 +174,7 @@ function midiToSpelling(midiNote) {
 }
 
 function computeLetterStepsForSemitones(semitones) {
-    const map = { 0:0, 1:1, 2:1, 3:2, 4:2, 5:3, 6:3, 7:4, 8:5, 9:5, 10:6, 11:6, 12:0 };
+    const map = { 0:0, 1:1, 2:1, 3:2, 4:2, 5:3, 6:3, 7:4, 8:5, 9:5, 10:6, 11:6, 12:7 };
     return map[semitones] ?? 0;
 }
 
@@ -234,30 +234,20 @@ function getProperEnharmonicSpelling(startSpell, intervalSemitones, direction) {
     
     // Determine if we should prefer sharps or flats based on the starting note's context
     const basePC = LETTER_BASE_SEMITONES[targetLetter];
-    const accidental = (targetPC - basePC + 12) % 12;
+    let accidental = (targetPC - basePC + 12) % 12;
     
-    let finalAccidental;
-    if (accidental === 0) {
-        finalAccidental = 0; // Natural
-    } else if (accidental <= 6) {
-        // Closer to sharp side
-        if (accidental <= 2) {
-            finalAccidental = accidental;
-        } else {
-            finalAccidental = accidental - 12; // Convert to flats
-        }
-    } else {
-        // Closer to flat side
-        finalAccidental = accidental - 12;
+    // Convert to proper accidental representation
+    if (accidental > 6) {
+        accidental = accidental - 12; // Use flats for large positive values
     }
     
     // Ensure we don't exceed reasonable accidental limits
-    if (finalAccidental > 2) finalAccidental = 2;
-    if (finalAccidental < -2) finalAccidental = -2;
+    if (accidental > 2) accidental = 2;
+    if (accidental < -2) accidental = -2;
 
     return {
         letter: targetLetter,
-        accidental: finalAccidental,
+        accidental: accidental,
         octave: targetOctave
     };
 }
@@ -273,6 +263,15 @@ function getIntervalNoteRenderData(startMidi, semitones, direction, enforceNatur
 
     const startVF = { key: spellingToVexKey(startSpell), accidental: accidentalToVexSymbol(startSpell.accidental) };
     const endVF = { key: spellingToVexKey(endSpell), accidental: accidentalToVexSymbol(endSpell.accidental) };
+    
+    // Validate the generated keys
+    if (!startVF.key || !endVF.key) {
+        console.error('Invalid VexFlow keys generated:', { startVF, endVF, startSpell, endSpell });
+        // Fallback to simple MIDI conversion
+        const fallbackStart = midiToVexFlow(startMidi);
+        const fallbackEnd = midiToVexFlow(startMidi + (ascending ? semitones : -semitones));
+        return { startVF: fallbackStart, endVF: fallbackEnd };
+    }
     
     // Store the actual spellings used for interval validation
     AppState.lastVFNotes = {
@@ -443,86 +442,79 @@ function setupVexFlowRenderer(VF) {
 
 function drawInterval(note1VF, note2VF) {
     const container = DOM.staveDisplayContainer;
-    if (!AppState.isVexFlowLoaded || !AppState.vexFlow.renderer) {
+    
+    // Check if we have valid note data
+    if (!note1VF || !note2VF || !note1VF.key || !note2VF.key) {
+        console.error('Invalid note data:', note1VF, note2VF);
+        container.innerHTML = `<div class="p-4 text-center text-gray-800"><p class="font-bold text-xl text-red-600">⚠️ Dades de notes invàlides</p></div>`;
+        return;
+    }
+    
+    if (!AppState.isVexFlowLoaded) {
         container.innerHTML = `<div class="p-4 text-center text-gray-800"><p class="font-bold text-xl text-red-600">⚠️ Error de Càrrega Musical</p><p class="text-sm mt-1">No s'ha pogut carregar VexFlow per dibuixar el pentagrama.</p><p class="text-sm">La lògica de l'interval s'ha generat internament. Prem "Comprova" amb la teva resposta.</p></div>`;
         return;
     }
 
-    // Re-initialize if context is corrupted
-    if (!AppState.vexFlow.context || !AppState.vexFlow.stave) {
-        try {
-            setupVexFlowRenderer(AppState.vexFlow.VF);
-        } catch (error) {
-            console.error("Failed to re-initialize VexFlow:", error);
-            container.innerHTML = `<div class="p-4 text-center text-gray-800"><p class="font-bold text-xl text-red-600">⚠️ Error de Reinicialització</p><p class="text-sm mt-1">Prova de recarregar la pàgina.</p></div>`;
-            return;
-        }
-    }
-
     const { VF } = AppState.vexFlow;
+    if (!VF) {
+        console.error('VexFlow namespace not available');
+        return;
+    }
     
-    // Clear previous content more reliably
     try {
-        // Clear the entire container and reinitialize
+        // Clear container and create fresh renderer
         container.innerHTML = '';
         
-        // Recreate renderer and stave for each draw to prevent state corruption
-        const containerWidth = DOM.staveContainer && typeof DOM.staveContainer.clientWidth === 'number' ? DOM.staveContainer.clientWidth : 0;
-        const innerWidth = containerWidth - 16; // Reduced padding
-        const safeInnerWidth = Number.isFinite(innerWidth) ? innerWidth : 0;
-        const clampedWidth = Math.max(200, Math.min(safeInnerWidth > 0 ? safeInnerWidth : 500, 700)); // Smaller default
-        const width = clampedWidth;
-        const height = 120; // Reduced height
+        const containerWidth = DOM.staveContainer ? DOM.staveContainer.clientWidth : 500;
+        const width = Math.max(300, Math.min(containerWidth - 20, 600));
+        const height = 120;
 
         const renderer = new VF.Renderer(container, VF.Renderer.Backends.SVG);
         renderer.resize(width, height);
         const context = renderer.getContext();
-        const stave = new VF.Stave(10, 0, width - 20);
-        stave.addClef('treble').addTimeSignature('2/4');
+        
+        const stave = new VF.Stave(10, 10, width - 20);
+        stave.addClef('treble');
         stave.setContext(context).draw();
         
-        // Update state with new instances
-        AppState.vexFlow.renderer = renderer;
-        AppState.vexFlow.context = context;
-        AppState.vexFlow.stave = stave;
-        
-    } catch (error) {
-        console.error("Error clearing/reinitializing VexFlow context:", error);
-        container.innerHTML = `<div class="p-4 text-center text-gray-800"><p class="font-bold text-xl text-red-600">⚠️ Error de Context</p><p class="text-sm mt-1">Recarrega la pàgina si el problema persisteix.</p></div>`;
-        return;
-    }
-
-    try {
+        // Create notes
         const notes = [
             new VF.StaveNote({ clef: 'treble', keys: [note1VF.key], duration: 'q' }),
             new VF.StaveNote({ clef: 'treble', keys: [note2VF.key], duration: 'q' })
         ];
 
-        if (note1VF.accidental && note1VF.accidental !== '') {
+        // Add accidentals if needed
+        if (note1VF.accidental) {
             notes[0].addAccidental(0, new VF.Accidental(note1VF.accidental));
         }
-        if (note2VF.accidental && note2VF.accidental !== '') {
+        if (note2VF.accidental) {
             notes[1].addAccidental(0, new VF.Accidental(note2VF.accidental));
         }
 
-        // Use simpler voice creation for better compatibility
+        // Create voice and add notes
         const voice = new VF.Voice({ num_beats: 2, beat_value: 4 });
         voice.setStrict(false);
         voice.addTickables(notes);
 
+        // Format and draw
         const formatter = new VF.Formatter();
-        formatter.joinVoices([voice]).format([voice], stave.getWidth() - 40);
+        formatter.joinVoices([voice]).format([voice], width - 60);
         voice.draw(context, stave);
+        
+        // Update app state
+        AppState.vexFlow.renderer = renderer;
+        AppState.vexFlow.context = context;
+        AppState.vexFlow.stave = stave;
+        
     } catch (error) {
-        console.error("Error drawing with VexFlow: ", error);
-        const safeMsg = (error && (error.message || String(error))) || 'Unknown error';
+        console.error("Error drawing interval:", error);
+        const safeMsg = error.message || 'Unknown error';
         container.innerHTML = `<div class="p-4 text-center text-gray-800">
             <p class="font-bold text-xl text-red-600">⚠️ Error de Visualització</p>
             <p class="text-sm mt-1">${safeMsg}</p>
             <button onclick="IntervallyApp.recoverFromVexFlowError()" class="mt-3 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors">
                 Intentar Recuperar
             </button>
-            <p class="text-xs mt-2">L'interval es pot validar sense la visualització.</p>
         </div>`;
     }
 }
@@ -541,11 +533,15 @@ function handleResize() {
     AppState.vexFlow.renderer.resize(width, height);
     AppState.vexFlow.stave.setWidth(width - 20);
 
-    if (AppState.startNoteMIDI) {
-        const note1VF = midiToVexFlow(AppState.startNoteMIDI);
-        const endNoteMIDI = AppState.startNoteMIDI + (AppState.currentDirection === 'descendente' ? -AppState.currentIntervalSemitones : AppState.currentIntervalSemitones);
-        const note2VF = midiToVexFlow(endNoteMIDI);
-        drawInterval(note1VF, note2VF);
+    if (AppState.startNoteMIDI && AppState.currentIntervalSemitones !== null && AppState.currentDirection) {
+        const enforceNaturals = AppState.difficulty === 'inicial';
+        const { startVF, endVF } = getIntervalNoteRenderData(
+            AppState.startNoteMIDI, 
+            AppState.currentIntervalSemitones, 
+            AppState.currentDirection, 
+            enforceNaturals
+        );
+        drawInterval(startVF, endVF);
     }
 }
 
@@ -674,6 +670,7 @@ function generateInterval() {
 
     AppState.startNoteMIDI = startNoteMIDI;
     const enforceNaturals = AppState.difficulty === 'inicial';
+    
     const { startVF, endVF } = getIntervalNoteRenderData(startNoteMIDI, intervalSemitones, direction, enforceNaturals);
     drawInterval(startVF, endVF);
 
