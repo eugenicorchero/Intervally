@@ -342,11 +342,11 @@ function setupVexFlowRenderer(VF) {
         container.innerHTML = '';
 
         const containerWidth = DOM.staveContainer && typeof DOM.staveContainer.clientWidth === 'number' ? DOM.staveContainer.clientWidth : 0;
-        const innerWidth = containerWidth - 32;
+        const innerWidth = containerWidth - 16; // Reduced padding
         const safeInnerWidth = Number.isFinite(innerWidth) ? innerWidth : 0;
-        const clampedWidth = Math.max(200, Math.min(safeInnerWidth > 0 ? safeInnerWidth : 600, 800));
+        const clampedWidth = Math.max(200, Math.min(safeInnerWidth > 0 ? safeInnerWidth : 500, 700)); // Smaller default
         const width = clampedWidth;
-        const height = 150;
+        const height = 120; // Reduced height
 
         // Validate VexFlow components before using them
         if (!VF.Renderer || !VF.Renderer.Backends || !VF.Renderer.Backends.SVG) {
@@ -468,11 +468,11 @@ function drawInterval(note1VF, note2VF) {
         
         // Recreate renderer and stave for each draw to prevent state corruption
         const containerWidth = DOM.staveContainer && typeof DOM.staveContainer.clientWidth === 'number' ? DOM.staveContainer.clientWidth : 0;
-        const innerWidth = containerWidth - 32;
+        const innerWidth = containerWidth - 16; // Reduced padding
         const safeInnerWidth = Number.isFinite(innerWidth) ? innerWidth : 0;
-        const clampedWidth = Math.max(100, Math.min(safeInnerWidth > 0 ? safeInnerWidth : 600, 800));
+        const clampedWidth = Math.max(200, Math.min(safeInnerWidth > 0 ? safeInnerWidth : 500, 700)); // Smaller default
         const width = clampedWidth;
-        const height = 150;
+        const height = 120; // Reduced height
 
         const renderer = new VF.Renderer(container, VF.Renderer.Backends.SVG);
         renderer.resize(width, height);
@@ -548,11 +548,11 @@ function handleResize() {
 
     const container = DOM.staveContainer;
     const containerWidth = container && typeof container.clientWidth === 'number' ? container.clientWidth : 0;
-    const innerWidth = containerWidth - 32;
+    const innerWidth = containerWidth - 16; // Reduced padding
     const safeInnerWidth = Number.isFinite(innerWidth) ? innerWidth : 0;
-    const clampedWidth = Math.max(100, Math.min(safeInnerWidth > 0 ? safeInnerWidth : 600, 800));
+    const clampedWidth = Math.max(200, Math.min(safeInnerWidth > 0 ? safeInnerWidth : 500, 700)); // Smaller default
     const width = clampedWidth;
-    const height = 150;
+    const height = 120; // Reduced height
 
     AppState.vexFlow.renderer.resize(width, height);
     AppState.vexFlow.stave.setWidth(width - 20);
@@ -572,10 +572,19 @@ function handleResize() {
 function switchView(viewName) {
     DOM.startScreen.classList.add('hidden');
     DOM.gameScreen.classList.add('hidden');
+    document.body.classList.remove('game-active');
+    
     if (viewName === 'start') {
         DOM.startScreen.classList.remove('hidden');
+        // Show header and footer on start screen
+        document.getElementById('main-header').style.display = 'block';
+        document.getElementById('main-footer').style.display = 'block';
     } else if (viewName === 'game') {
         DOM.gameScreen.classList.remove('hidden');
+        document.body.classList.add('game-active');
+        // Minimize header during game, hide footer
+        document.getElementById('main-header').style.display = 'none';
+        document.getElementById('main-footer').style.display = 'none';
     }
 }
 
@@ -892,22 +901,16 @@ function generateButtons() {
     }
     const allowedSemitones = DIFFICULTY_CONFIG[AppState.difficulty].semitones;
     const allowedIntervals = INTERVAL_MAP.filter(interval => allowedSemitones.includes(interval.semitones));
-    const numIntervals = allowedIntervals.length;
-    let gridClass;
-    if (numIntervals <= 5) {
-        gridClass = 'grid-cols-2 sm:grid-cols-3';
-    } else if (numIntervals <= 8) {
-        gridClass = 'grid-cols-3 sm:grid-cols-4';
-    } else {
-        gridClass = 'grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7';
-    }
-    DOM.intervalButtonsContainer.className = `grid gap-3 ${gridClass}`;
+    
+    // Always use a compact grid layout
+    DOM.intervalButtonsContainer.className = 'grid grid-cols-4 sm:grid-cols-5 lg:grid-cols-7 gap-2';
+    
     allowedIntervals.forEach(interval => {
         const btn = document.createElement('button');
         btn.id = `interval-${interval.semitones}`;
         btn.textContent = interval.btnName;
         btn.setAttribute('onclick', `IntervallyApp.selectInterval(${interval.semitones})`);
-        btn.className = 'interval-button interval-button-choice p-3 rounded-lg font-semibold bg-gray-700 hover:bg-gray-600 text-white transition duration-150 border-2 border-transparent focus:border-blue-400';
+        btn.className = 'interval-button interval-button-choice interval-btn-compact p-2 rounded-lg font-semibold text-xs sm:text-sm bg-gray-700 hover:bg-gray-600 text-white transition duration-150 border-2 border-transparent focus:border-blue-400';
         btn.setAttribute('aria-pressed', 'false');
         container.appendChild(btn);
     });
@@ -981,13 +984,19 @@ function recoverFromVexFlowError() {
     return false;
 }
 
+function returnToMenu() {
+    stopTimer();
+    switchView('start');
+}
+
 const IntervallyApp = {
     startGame,
     nextInterval,
     checkAnswer,
     selectInterval,
     selectDirection,
-    recoverFromVexFlowError
+    recoverFromVexFlowError,
+    returnToMenu
 };
 
 function init() {

@@ -17,35 +17,36 @@
             background-color: #0d1117; /* Fons fosc */
             color: #e5e7eb; /* Text clar */
             min-height: 100vh;
+            overflow-x: hidden;
         }
         .interval-button {
             transition: all 0.1s ease;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 2px 4px -1px rgba(0, 0, 0, 0.3), 0 1px 3px -1px rgba(0, 0, 0, 0.1);
         }
         .interval-button:hover:not(:disabled) {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 20px -3px rgba(37, 99, 235, 0.3), 0 4px 6px -4px rgba(37, 99, 235, 0.2);
+            transform: translateY(-1px);
+            box-shadow: 0 6px 12px -2px rgba(37, 99, 235, 0.3), 0 2px 4px -2px rgba(37, 99, 235, 0.2);
         }
         .timer-display {
-            font-size: 1.5rem;
+            font-size: 1.25rem;
             font-weight: bold;
             transition: color 0.5s ease;
-            min-width: 40px; 
+            min-width: 35px; 
             text-align: right;
         }
         .score-display {
             display: flex;
             align-items: center;
-            gap: 1rem;
+            gap: 0.5rem;
         }
         .direction-disabled {
             opacity: 0.5;
             cursor: not-allowed;
         }
-        /* Mida del contenidor de VexFlow, important per a CLS */
+        /* Mida del contenidor de VexFlow optimitzada */
         #stave-container {
-            min-height: 150px;
-            padding: 16px; 
+            min-height: 100px;
+            padding: 8px; 
             background-color: #ffffff; 
             display: flex; 
             align-items: center;
@@ -56,119 +57,234 @@
             height: auto;
             overflow: hidden;
         }
-        /* Centrar verticalment si la pantalla és prou gran */
-        @media (min-height: 700px) {
-            body {
-                display: flex;
-                flex-direction: column;
-                justify-content: center;
+        
+        /* Layout optimitzat per evitar scroll */
+        .game-layout {
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .game-header-compact {
+            flex-shrink: 0;
+            padding: 0.5rem 0;
+        }
+        
+        .game-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            min-height: 0;
+        }
+        
+        .game-main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+        
+        .stave-section {
+            flex-shrink: 0;
+        }
+        
+        .controls-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            min-height: 0;
+            padding: 0.75rem 0;
+        }
+
+        /* Botó compacte per a intervals */
+        .interval-btn-compact {
+            min-height: 2.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Optimitzacions per a pantalles petites */
+        @media (max-width: 640px) {
+            #stave-container {
+                min-height: 80px;
+                padding: 6px;
+            }
+            .timer-display {
+                font-size: 1rem;
+                min-width: 30px;
+            }
+            .game-header-compact {
+                padding: 0.25rem 0;
+            }
+            .controls-section {
+                padding: 0.5rem 0;
+            }
+            .interval-btn-compact {
+                min-height: 2rem;
+                font-size: 0.75rem;
             }
         }
-        /* Optimitzacions per a pantalles petites (iPhone) */
-        @media (max-width: 380px) {
+        
+        /* Per a pantalles molt petites en altura */
+        @media (max-height: 600px) {
             #stave-container {
-                min-height: 120px;
-                padding: 8px;
+                min-height: 70px;
+                padding: 4px;
             }
+            .game-header-compact {
+                padding: 0.25rem 0;
+            }
+            .controls-section {
+                padding: 0.25rem 0;
+            }
+            .interval-btn-compact {
+                min-height: 1.75rem;
+                font-size: 0.7rem;
+            }
+        }
+        
+        /* Per a pantalles extremadament petites */
+        @media (max-height: 500px) {
+            #stave-container {
+                min-height: 60px;
+                padding: 2px;
+            }
+            .controls-section {
+                padding: 0.125rem 0;
+            }
+            .interval-btn-compact {
+                min-height: 1.5rem;
+                font-size: 0.65rem;
+            }
+        }
+        
+        /* Ocultar footer durant el joc */
+        .game-active footer {
+            display: none;
         }
     </style>
 </head>
-<body class="p-4 sm:p-6 flex flex-col items-center">
+<body class="p-2 sm:p-4">
 
-    <main class="w-full max-w-5xl">
+    <main class="w-full max-w-6xl mx-auto">
 
-        <header class="text-center mb-8 border-b border-blue-800 pb-4">
-            <h1 class="text-4xl sm:text-5xl font-extrabold text-blue-400 tracking-tight">Intervally</h1>
-            <p class="text-gray-400 mt-1">Entrenador d'Intervals Musicals</p>
+        <header id="main-header" class="text-center mb-4 border-b border-blue-800 pb-2">
+            <h1 class="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-blue-400 tracking-tight">Intervally</h1>
+            <p class="text-gray-400 text-sm">Entrenador d'Intervals Musicals</p>
         </header>
 
-        <section id="start-screen" class="text-center p-8 bg-gray-800 rounded-xl shadow-2xl transition duration-500">
+        <section id="start-screen" class="text-center p-4 sm:p-6 bg-gray-800 rounded-xl shadow-2xl transition duration-500">
             
-            <div id="loading-indicator" class="p-8 text-xl font-semibold text-blue-400 hidden">
+            <div id="loading-indicator" class="p-6 text-lg font-semibold text-blue-400 hidden">
                 Carregant recursos musicals... 🎶
             </div>
 
             <div id="intro-content">
-                <h2 class="text-3xl font-bold mb-6 text-white">Benvingut/da! Tria el teu Nivell de Pràctica</h2>
-                <p class="text-gray-300 mb-10 max-w-2xl mx-auto">
-                    Practica la identificació d'intervals musicals de forma visual. Selecciona un nivell de dificultat per començar.
-                    Recorda que tens 30 segons per a cada resposta.
+                <h2 class="text-xl sm:text-2xl font-bold mb-4 text-white">Tria el teu Nivell de Pràctica</h2>
+                <p class="text-gray-300 mb-6 max-w-2xl mx-auto text-sm sm:text-base">
+                    Practica la identificació d'intervals musicals de forma visual. Tens 30 segons per resposta.
                 </p>
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                     <button id="btn-inicial" onclick="IntervallyApp.startGame('inicial')" aria-controls="game-screen"
-                        class="p-6 bg-blue-700 hover:bg-blue-600 text-white font-semibold rounded-lg shadow-lg transition duration-300 transform hover:scale-[1.02] interval-button">
-                        <span class="text-2xl block">Inicial</span>
-                        <span class="text-sm opacity-75 mt-1 block">(Ascendent: Uníson, 2a M, 3a M, 4a J, 5a J, 6a M, 7a M, 8a J — sense sostinguts ni bemolls)</span>
+                        class="p-4 bg-blue-700 hover:bg-blue-600 text-white font-semibold rounded-lg shadow-lg transition duration-300 transform hover:scale-[1.02] interval-button">
+                        <span class="text-lg block">Inicial</span>
+                        <span class="text-xs opacity-75 mt-1 block">(Ascendent: Intervals bàsics sense alteracions)</span>
                     </button>
                     <button id="btn-intermedio" onclick="IntervallyApp.startGame('intermedio')" aria-controls="game-screen"
-                        class="p-6 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-lg shadow-lg transition duration-300 transform hover:scale-[1.02] interval-button">
-                        <span class="text-2xl block">Intermedi</span>
-                        <span class="text-sm opacity-75 mt-1 block">(Ascendent: Tots els intervals fins a 8a J, incloent menors i augmentats/disminuïts)</span>
+                        class="p-4 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-lg shadow-lg transition duration-300 transform hover:scale-[1.02] interval-button">
+                        <span class="text-lg block">Intermedi</span>
+                        <span class="text-xs opacity-75 mt-1 block">(Ascendent: Tots els intervals amb alteracions)</span>
                     </button>
                     <button id="btn-dificil" onclick="IntervallyApp.startGame('dificil')" aria-controls="game-screen"
-                        class="p-6 bg-blue-500 hover:bg-blue-400 text-white font-semibold rounded-lg shadow-lg transition duration-300 transform hover:scale-[1.02] interval-button">
-                        <span class="text-2xl block">Difícil</span>
-                        <span class="text-sm opacity-75 mt-1 block">(Ascendent/Descendent: Tots els intervals fins a 8a J)</span>
+                        class="p-4 bg-blue-500 hover:bg-blue-400 text-white font-semibold rounded-lg shadow-lg transition duration-300 transform hover:scale-[1.02] interval-button">
+                        <span class="text-lg block">Difícil</span>
+                        <span class="text-xs opacity-75 mt-1 block">(Ascendent/Descendent: Tots els intervals)</span>
                     </button>
                 </div>
             </div>
         </section>
 
-        <section id="game-screen" aria-labelledby="game-heading" class="hidden flex flex-col space-y-6 p-4 bg-gray-800 rounded-xl shadow-2xl">
-
-            <div class="flex flex-col sm:flex-row justify-between items-center px-4 py-3 bg-gray-900 rounded-lg shadow-inner gap-4 border border-gray-700">
-                <div class="text-lg text-gray-400">Dificultat: <span id="current-difficulty" class="font-semibold text-blue-300"></span></div>
-                
-                <div class="score-display text-lg text-gray-400" aria-live="polite">
-                    Puntuació: <span id="score-correct" class="font-semibold text-green-400">0</span> / <span id="score-total" class="font-semibold text-white">0</span>
-                </div>
-                
-                <div class="flex items-center space-x-2">
-                     <span class="text-gray-400">Temps:</span>
-                    <div class="timer-display text-green-500" id="timer-display" aria-live="off">30</div>
-                </div>
-            </div>
-
-            <div id="stave-container" class="rounded-lg shadow-xl border border-gray-700">
-                <div id="stave-display" role="img" aria-label="Pentagrama amb un interval musical"></div> 
-            </div>
-
-            <div class="space-y-4">
-                <h3 id="game-heading" class="text-xl font-semibold text-white border-b border-gray-700 pb-2 pt-2">Selecciona la Resposta</h3>
-
-                <div id="interval-buttons-container" class="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7 gap-3">
-                </div>
-
-                <div class="flex justify-center space-x-4 p-3 bg-gray-900 rounded-lg border border-gray-700">
-                    <button id="btn-ascendente" onclick="IntervallyApp.selectDirection('ascendente')"
-                        class="interval-button p-3 w-1/2 rounded-lg font-semibold bg-gray-600 hover:bg-gray-500 text-white border-2 border-transparent focus:border-blue-400 transition duration-150" aria-pressed="false">
-                        Ascendent
-                    </button>
-                    <button id="btn-descendente" onclick="IntervallyApp.selectDirection('descendente')"
-                        class="interval-button p-3 w-1/2 rounded-lg font-semibold bg-gray-600 hover:bg-gray-500 text-white border-2 border-transparent focus:border-blue-400 transition duration-150" aria-pressed="false">
-                        Descendent
-                    </button>
-                </div>
-
-                <div id="feedback-message" class="text-center h-8 font-bold text-lg" aria-live="off"></div>
-
-                <div class="flex justify-center space-x-4 pt-4 border-t border-gray-700">
-                    <button id="btn-check" onclick="IntervallyApp.checkAnswer()" disabled
-                        class="p-4 rounded-lg font-bold w-1/2 bg-blue-700 hover:bg-blue-600 text-white disabled:bg-gray-500 disabled:cursor-not-allowed transition duration-150 transform hover:scale-[1.01] interval-button">
-                        Comprova
-                    </button>
-                    <button id="btn-next" onclick="IntervallyApp.nextInterval()" disabled
-                        class="p-4 rounded-lg font-bold w-1/2 bg-gray-600 hover:bg-gray-500 text-white disabled:opacity-50 disabled:cursor-not-allowed transition duration-150 transform hover:scale-[1.01] interval-button">
-                        Següent Interval
-                    </button>
+        <section id="game-screen" aria-labelledby="game-heading" class="hidden game-layout">
+            <!-- Compact header for game -->
+            <div class="game-header-compact">
+                <div class="flex flex-col sm:flex-row justify-between items-center px-3 py-2 bg-gray-900 rounded-lg shadow-inner gap-2 border border-gray-700">
+                    <div class="text-sm text-gray-400">
+                        <span class="hidden sm:inline">Dificultat: </span><span id="current-difficulty" class="font-semibold text-blue-300"></span>
+                    </div>
+                    
+                    <div class="score-display text-sm text-gray-400" aria-live="polite">
+                        <span class="hidden sm:inline">Puntuació: </span>
+                        <span id="score-correct" class="font-semibold text-green-400">0</span>/<span id="score-total" class="font-semibold text-white">0</span>
+                    </div>
+                    
+                    <div class="flex items-center space-x-2">
+                        <button onclick="IntervallyApp.returnToMenu()" class="text-xs text-gray-400 hover:text-white transition-colors">
+                            ← Menú
+                        </button>
+                        <span class="text-gray-400 text-sm">Temps:</span>
+                        <div class="timer-display text-green-500" id="timer-display" aria-live="off">30</div>
+                    </div>
                 </div>
             </div>
 
+            <!-- Game content container -->
+            <div class="game-content bg-gray-800 rounded-xl shadow-2xl p-3 sm:p-4">
+                <!-- Musical staff section -->
+                <div class="stave-section mb-3">
+                    <div id="stave-container" class="rounded-lg shadow-xl border border-gray-700">
+                        <div id="stave-display" role="img" aria-label="Pentagrama amb un interval musical"></div> 
+                    </div>
+                </div>
+
+                <!-- Controls section -->
+                <div class="controls-section">
+                    <div class="space-y-3">
+                        <!-- Interval buttons -->
+                        <div>
+                            <h3 id="game-heading" class="text-sm font-semibold text-white mb-2">Selecciona la Resposta</h3>
+                            <div id="interval-buttons-container" class="grid grid-cols-4 sm:grid-cols-5 lg:grid-cols-7 gap-2">
+                                <!-- Buttons generated dynamically -->
+                            </div>
+                        </div>
+
+                        <!-- Direction buttons -->
+                        <div class="flex justify-center space-x-3 p-2 bg-gray-900 rounded-lg border border-gray-700">
+                            <button id="btn-ascendente" onclick="IntervallyApp.selectDirection('ascendente')"
+                                class="interval-button p-2 w-1/2 rounded-lg font-semibold text-sm bg-gray-600 hover:bg-gray-500 text-white border-2 border-transparent focus:border-blue-400 transition duration-150" aria-pressed="false">
+                                Ascendent
+                            </button>
+                            <button id="btn-descendente" onclick="IntervallyApp.selectDirection('descendente')"
+                                class="interval-button p-2 w-1/2 rounded-lg font-semibold text-sm bg-gray-600 hover:bg-gray-500 text-white border-2 border-transparent focus:border-blue-400 transition duration-150" aria-pressed="false">
+                                Descendent
+                            </button>
+                        </div>
+
+                        <!-- Feedback message -->
+                        <div id="feedback-message" class="text-center h-6 font-bold text-sm" aria-live="off"></div>
+
+                        <!-- Action buttons -->
+                        <div class="flex justify-center space-x-3">
+                            <button id="btn-check" onclick="IntervallyApp.checkAnswer()" disabled
+                                class="p-3 rounded-lg font-bold w-1/2 text-sm bg-blue-700 hover:bg-blue-600 text-white disabled:bg-gray-500 disabled:cursor-not-allowed transition duration-150 transform hover:scale-[1.01] interval-button">
+                                Comprova
+                            </button>
+                            <button id="btn-next" onclick="IntervallyApp.nextInterval()" disabled
+                                class="p-3 rounded-lg font-bold w-1/2 text-sm bg-gray-600 hover:bg-gray-500 text-white disabled:opacity-50 disabled:cursor-not-allowed transition duration-150 transform hover:scale-[1.01] interval-button">
+                                Següent
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </section>
         
     </main>
 
-    <footer class="w-full max-w-5xl mt-8 text-center text-gray-500 border-t border-gray-700 pt-4">
+    <footer id="main-footer" class="w-full max-w-6xl mx-auto mt-4 text-center text-gray-500 border-t border-gray-700 pt-2 text-xs">
         &copy; Eugeni Corchero 2025
     </footer>
 
