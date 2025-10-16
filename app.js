@@ -459,7 +459,7 @@ function drawInterval(note1VF, note2VF) {
         }
     }
 
-    const { context, stave, VF } = AppState.vexFlow;
+    const { VF } = AppState.vexFlow;
     
     // Clear previous content more reliably
     try {
@@ -476,15 +476,15 @@ function drawInterval(note1VF, note2VF) {
 
         const renderer = new VF.Renderer(container, VF.Renderer.Backends.SVG);
         renderer.resize(width, height);
-        const newContext = renderer.getContext();
-        const newStave = new VF.Stave(10, 0, width - 20);
-        newStave.addClef('treble').addTimeSignature('2/4');
-        newStave.setContext(newContext).draw();
+        const context = renderer.getContext();
+        const stave = new VF.Stave(10, 0, width - 20);
+        stave.addClef('treble').addTimeSignature('2/4');
+        stave.setContext(context).draw();
         
         // Update state with new instances
         AppState.vexFlow.renderer = renderer;
-        AppState.vexFlow.context = newContext;
-        AppState.vexFlow.stave = newStave;
+        AppState.vexFlow.context = context;
+        AppState.vexFlow.stave = stave;
         
     } catch (error) {
         console.error("Error clearing/reinitializing VexFlow context:", error);
@@ -498,36 +498,20 @@ function drawInterval(note1VF, note2VF) {
             new VF.StaveNote({ clef: 'treble', keys: [note2VF.key], duration: 'q' })
         ];
 
-        if (note1VF.accidental) {
+        if (note1VF.accidental && note1VF.accidental !== '') {
             notes[0].addAccidental(0, new VF.Accidental(note1VF.accidental));
         }
-        if (note2VF.accidental) {
+        if (note2VF.accidental && note2VF.accidental !== '') {
             notes[1].addAccidental(0, new VF.Accidental(note2VF.accidental));
         }
 
-        let voice;
-        try {
-            // VexFlow v4 prefereix l'objecte time
-            voice = new VF.Voice({ time: { num_beats: 2, beat_value: 4 } });
-        } catch (_) {
-            // Compatibilitat v3
-            voice = new VF.Voice({ num_beats: 2, beat_value: 4 });
-        }
-        if (voice && VF.Voice && VF.Voice.Mode && typeof voice.setMode === 'function') {
-            // Mode SOFT no exigeix quadrar exactament el total de ticks amb el compàs
-            voice.setMode(VF.Voice.Mode.SOFT);
-        } else if (typeof voice.setStrict === 'function') {
-            voice.setStrict(false);
-        }
+        // Use simpler voice creation for better compatibility
+        const voice = new VF.Voice({ num_beats: 2, beat_value: 4 });
+        voice.setStrict(false);
         voice.addTickables(notes);
 
         const formatter = new VF.Formatter();
-        if (typeof formatter.joinVoices === 'function') {
-            formatter.joinVoices([voice]).format([voice], Math.max(50, stave.getWidth() - 40));
-        } else {
-            // En algunes versions, joinVoices no és necessari o no existeix
-            formatter.format([voice], Math.max(50, stave.getWidth() - 40));
-        }
+        formatter.joinVoices([voice]).format([voice], stave.getWidth() - 40);
         voice.draw(context, stave);
     } catch (error) {
         console.error("Error drawing with VexFlow: ", error);
