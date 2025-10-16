@@ -51,11 +51,11 @@ const ENHARMONIC_MAP = {
 const SHARP_KEYS = ['C', 'G', 'D', 'A', 'E', 'B', 'F#', 'C#'];
 const FLAT_KEYS = ['F', 'Bb', 'Eb', 'Ab', 'Db', 'Gb', 'Cb'];
 
-const MIN_NOTE_MIDI = 45; // A2
-const MAX_NOTE_MIDI = 69; // A4
+const MIN_NOTE_MIDI = 57; // A3
+const MAX_NOTE_MIDI = 81; // A5
 
-const PITCH_RANGE_MIDI_MIN = 33; // A1 (for safety margin)
-const PITCH_RANGE_MIDI_MAX = 81; // A5 (for safety margin)
+const PITCH_RANGE_MIDI_MIN = 45; // A2 (for safety margin)
+const PITCH_RANGE_MIDI_MAX = 93; // A6 (for safety margin)
 
 const AppState = {
     difficulty: null,
@@ -604,66 +604,66 @@ function generateInterval() {
     let startNoteMIDI;
     let endNoteMIDI;
 
+    // Calculate valid range for start note based on direction and interval
+    let validStartMin, validStartMax;
+    
     if (direction === 'descendente') {
-        // For descending intervals, start note must be high enough
-        const safeMinStart = MIN_NOTE_MIDI + intervalSemitones;
-        const actualMin = Math.max(MIN_NOTE_MIDI, safeMinStart);
-        const actualMax = MAX_NOTE_MIDI;
-
-        if (AppState.difficulty === 'inicial') {
-            // For initial difficulty, prefer natural notes
-            const candidates = [];
-            for (let m = actualMin; m <= actualMax; m++) {
-                const end = m - intervalSemitones;
-                if (end >= MIN_NOTE_MIDI && end <= MAX_NOTE_MIDI && isNaturalMidi(m) && isNaturalMidi(end)) {
-                    candidates.push(m);
-                }
-            }
-            if (candidates.length > 0) {
-                startNoteMIDI = candidates[Math.floor(Math.random() * candidates.length)];
-            } else {
-                // Fallback to any valid note in range
-                startNoteMIDI = Math.floor(Math.random() * (actualMax - actualMin + 1)) + actualMin;
-            }
-        } else {
-            startNoteMIDI = Math.floor(Math.random() * (actualMax - actualMin + 1)) + actualMin;
-        }
-        endNoteMIDI = startNoteMIDI - intervalSemitones;
+        // For descending intervals, start note must be high enough that end note stays in range
+        validStartMin = MIN_NOTE_MIDI + intervalSemitones;
+        validStartMax = MAX_NOTE_MIDI;
     } else {
-        // For ascending intervals, start note must be low enough
-        const safeMaxStart = MAX_NOTE_MIDI - intervalSemitones;
-        const actualMin = MIN_NOTE_MIDI;
-        const actualMax = Math.min(MAX_NOTE_MIDI, safeMaxStart);
-
-        if (AppState.difficulty === 'inicial') {
-            const candidates = [];
-            for (let m = actualMin; m <= actualMax; m++) {
-                const end = m + intervalSemitones;
-                if (end >= MIN_NOTE_MIDI && end <= MAX_NOTE_MIDI && isNaturalMidi(m) && isNaturalMidi(end)) {
-                    candidates.push(m);
-                }
-            }
-            if (candidates.length > 0) {
-                startNoteMIDI = candidates[Math.floor(Math.random() * candidates.length)];
-            } else {
-                // Fallback to any valid note in range
-                startNoteMIDI = Math.floor(Math.random() * (actualMax - actualMin + 1)) + actualMin;
-            }
-        } else {
-            startNoteMIDI = Math.floor(Math.random() * (actualMax - actualMin + 1)) + actualMin;
-        }
-        endNoteMIDI = startNoteMIDI + intervalSemitones;
+        // For ascending intervals, start note must be low enough that end note stays in range
+        validStartMin = MIN_NOTE_MIDI;
+        validStartMax = MAX_NOTE_MIDI - intervalSemitones;
     }
 
-    // Ensure both notes are within the A2-A4 range
-    if (endNoteMIDI < MIN_NOTE_MIDI || endNoteMIDI > MAX_NOTE_MIDI) {
-        console.warn(`Generated interval out of range. Start: ${startNoteMIDI}, End: ${endNoteMIDI}, adjusting...`);
-        // Retry with adjusted parameters
+    // Ensure we have a valid range
+    if (validStartMin > validStartMax) {
+        console.warn('Invalid range for interval:', intervalSemitones, 'in direction:', direction);
+        // Use a smaller interval or adjust range
         if (direction === 'descendente') {
-            startNoteMIDI = Math.min(MAX_NOTE_MIDI, MIN_NOTE_MIDI + intervalSemitones + Math.floor(Math.random() * 12));
+            validStartMin = MIN_NOTE_MIDI + Math.min(intervalSemitones, 12);
+            validStartMax = MAX_NOTE_MIDI;
+        } else {
+            validStartMin = MIN_NOTE_MIDI;
+            validStartMax = MAX_NOTE_MIDI - Math.min(intervalSemitones, 12);
+        }
+    }
+
+    // For inicial difficulty, try to find natural notes within range
+    if (AppState.difficulty === 'inicial') {
+        const candidates = [];
+        for (let m = validStartMin; m <= validStartMax; m++) {
+            const end = direction === 'descendente' ? m - intervalSemitones : m + intervalSemitones;
+            if (end >= MIN_NOTE_MIDI && end <= MAX_NOTE_MIDI && isNaturalMidi(m) && isNaturalMidi(end)) {
+                candidates.push(m);
+            }
+        }
+        if (candidates.length > 0) {
+            startNoteMIDI = candidates[Math.floor(Math.random() * candidates.length)];
+        } else {
+            // Fallback to any valid note in range
+            startNoteMIDI = Math.floor(Math.random() * (validStartMax - validStartMin + 1)) + validStartMin;
+        }
+    } else {
+        // For other difficulties, use any note in the valid range
+        startNoteMIDI = Math.floor(Math.random() * (validStartMax - validStartMin + 1)) + validStartMin;
+    }
+
+    // Calculate end note
+    endNoteMIDI = direction === 'descendente' ? startNoteMIDI - intervalSemitones : startNoteMIDI + intervalSemitones;
+
+    // Final check to ensure both notes are within A3-A5 range
+    if (startNoteMIDI < MIN_NOTE_MIDI || startNoteMIDI > MAX_NOTE_MIDI || 
+        endNoteMIDI < MIN_NOTE_MIDI || endNoteMIDI > MAX_NOTE_MIDI) {
+        console.warn(`Generated interval out of A3-A5 range. Start: ${startNoteMIDI}, End: ${endNoteMIDI}, adjusting...`);
+        
+        // Force into range with a safe interval
+        if (direction === 'descendente') {
+            startNoteMIDI = Math.min(MAX_NOTE_MIDI, MIN_NOTE_MIDI + intervalSemitones + Math.floor(Math.random() * (MAX_NOTE_MIDI - MIN_NOTE_MIDI - intervalSemitones)));
             endNoteMIDI = startNoteMIDI - intervalSemitones;
         } else {
-            startNoteMIDI = Math.max(MIN_NOTE_MIDI, MAX_NOTE_MIDI - intervalSemitones - Math.floor(Math.random() * 12));
+            startNoteMIDI = Math.max(MIN_NOTE_MIDI, Math.floor(Math.random() * (MAX_NOTE_MIDI - MIN_NOTE_MIDI - intervalSemitones)) + MIN_NOTE_MIDI);
             endNoteMIDI = startNoteMIDI + intervalSemitones;
         }
     }
