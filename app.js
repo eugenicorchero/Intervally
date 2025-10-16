@@ -31,11 +31,31 @@ const DIFFICULTY_CONFIG = {
 
 const SEMITONE_NOTE_MAP = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
-const MIN_NOTE_MIDI = 57; // A3
-const MAX_NOTE_MIDI = 81; // A5 (pujat una octava)
+// Enhanced enharmonic mapping for proper interval calculation
+const ENHARMONIC_MAP = {
+    0: ['C'],
+    1: ['C#', 'Db'],
+    2: ['D'],
+    3: ['D#', 'Eb'],
+    4: ['E'],
+    5: ['F'],
+    6: ['F#', 'Gb'],
+    7: ['G'],
+    8: ['G#', 'Ab'],
+    9: ['A'],
+    10: ['A#', 'Bb'],
+    11: ['B']
+};
 
-const PITCH_RANGE_MIDI_MIN = 45;
-const PITCH_RANGE_MIDI_MAX = 93; // pujat una octava
+// Circle of fifths for determining preferred accidentals
+const SHARP_KEYS = ['C', 'G', 'D', 'A', 'E', 'B', 'F#', 'C#'];
+const FLAT_KEYS = ['F', 'Bb', 'Eb', 'Ab', 'Db', 'Gb', 'Cb'];
+
+const MIN_NOTE_MIDI = 45; // A2
+const MAX_NOTE_MIDI = 69; // A4
+
+const PITCH_RANGE_MIDI_MIN = 33; // A1 (for safety margin)
+const PITCH_RANGE_MIDI_MAX = 81; // A5 (for safety margin)
 
 const AppState = {
     difficulty: null,
@@ -193,31 +213,75 @@ function bestAccidentalForBaseToPitchClass(basePitchClass, targetPitchClass) {
     return best;
 }
 
+// Enhanced function to determine proper enharmonic spelling based on interval theory
+function getProperEnharmonicSpelling(startSpell, intervalSemitones, direction) {
+    const ascending = direction !== 'descendente';
+    const steps = computeLetterStepsForSemitones(intervalSemitones);
+    const startLetterIdx = LETTERS.indexOf(startSpell.letter);
+    const targetLetterIdx = (startLetterIdx + (ascending ? steps : -steps) + 7) % 7;
+    const targetLetter = LETTERS[targetLetterIdx];
+    
+    let targetOctave = normalizeOctaveForTarget(startSpell.octave, startLetterIdx, targetLetterIdx, ascending);
+    
+    // For octave intervals, force octave change
+    if (intervalSemitones === 12) {
+        targetOctave = startSpell.octave + (ascending ? 1 : -1);
+    }
+
+    const startMidi = spelledToMidi(startSpell);
+    const targetMidi = startMidi + (ascending ? intervalSemitones : -intervalSemitones);
+    const targetPC = ((targetMidi % 12) + 12) % 12;
+    
+    // Determine if we should prefer sharps or flats based on the starting note's context
+    const basePC = LETTER_BASE_SEMITONES[targetLetter];
+    const accidental = (targetPC - basePC + 12) % 12;
+    
+    let finalAccidental;
+    if (accidental === 0) {
+        finalAccidental = 0; // Natural
+    } else if (accidental <= 6) {
+        // Closer to sharp side
+        if (accidental <= 2) {
+            finalAccidental = accidental;
+        } else {
+            finalAccidental = accidental - 12; // Convert to flats
+        }
+    } else {
+        // Closer to flat side
+        finalAccidental = accidental - 12;
+    }
+    
+    // Ensure we don't exceed reasonable accidental limits
+    if (finalAccidental > 2) finalAccidental = 2;
+    if (finalAccidental < -2) finalAccidental = -2;
+
+    return {
+        letter: targetLetter,
+        accidental: finalAccidental,
+        octave: targetOctave
+    };
+}
+
 function getIntervalNoteRenderData(startMidi, semitones, direction, enforceNaturals) {
     const ascending = direction !== 'descendente';
     const startSpell = midiToSpelling(startMidi);
     if (enforceNaturals) startSpell.accidental = 0;
 
-    const steps = computeLetterStepsForSemitones(semitones);
-    const startLetterIdx = LETTERS.indexOf(startSpell.letter);
-    const targetLetterIdx = (startLetterIdx + (ascending ? steps : -steps) + 7) % 7;
-    const targetLetter = LETTERS[targetLetterIdx];
-    let targetOctave = normalizeOctaveForTarget(startSpell.octave, startLetterIdx, targetLetterIdx, ascending);
-    // Si l'interval és 8a (12 semitons), cal forçar canvi d'octava encara que la lletra sigui la mateixa
-    if (semitones % 12 === 12 % 12 && semitones !== 0) {
-        targetOctave = targetOctave + (ascending ? 1 : -1);
-    }
-
-    const targetPitchMidi = startMidi + (ascending ? semitones : -semitones);
-    const targetPC = ((targetPitchMidi % 12) + 12) % 12;
-    const base = LETTER_BASE_SEMITONES[targetLetter];
-    let targetAcc = bestAccidentalForBaseToPitchClass(base, targetPC);
-    if (enforceNaturals) targetAcc = 0;
-
-    const endSpell = { letter: targetLetter, accidental: targetAcc, octave: targetOctave };
+    // Use enhanced enharmonic spelling for better interval accuracy
+    const endSpell = getProperEnharmonicSpelling(startSpell, semitones, direction);
+    if (enforceNaturals) endSpell.accidental = 0;
 
     const startVF = { key: spellingToVexKey(startSpell), accidental: accidentalToVexSymbol(startSpell.accidental) };
     const endVF = { key: spellingToVexKey(endSpell), accidental: accidentalToVexSymbol(endSpell.accidental) };
+    
+    // Store the actual spellings used for interval validation
+    AppState.lastVFNotes = {
+        startSpell: startSpell,
+        endSpell: endSpell,
+        actualInterval: semitones,
+        direction: direction
+    };
+    
     return { startVF, endVF };
 }
 
@@ -268,39 +332,113 @@ async function attemptLoadVexFlowSequential(urls) {
 }
 
 function setupVexFlowRenderer(VF) {
-    const container = DOM.staveDisplayContainer;
-    const containerWidth = DOM.staveContainer && typeof DOM.staveContainer.clientWidth === 'number' ? DOM.staveContainer.clientWidth : 0;
-    const innerWidth = containerWidth - 32;
-    const safeInnerWidth = Number.isFinite(innerWidth) ? innerWidth : 0;
-    const clampedWidth = Math.max(100, Math.min(safeInnerWidth > 0 ? safeInnerWidth : 600, 800));
-    const width = clampedWidth;
-    const height = 150;
+    try {
+        const container = DOM.staveDisplayContainer;
+        if (!container) {
+            throw new Error('Stave container not found');
+        }
 
-    const renderer = new VF.Renderer(container, VF.Renderer.Backends.SVG);
-    renderer.resize(width, height);
-    const context = renderer.getContext();
-    const stave = new VF.Stave(10, 0, width - 20);
-    // Ajusta el compàs a 2/4 per a dues notes quarter
-    stave.addClef('treble').addTimeSignature('2/4');
-    stave.setContext(context).draw();
-    AppState.vexFlow = { renderer, context, stave, VF };
+        // Clean up any existing content
+        container.innerHTML = '';
 
-    window.addEventListener('resize', handleResize);
-    // Millora de responsivitat: ajusta l'SVG a l'amplada del contenidor
-    const svg = DOM.staveDisplayContainer.querySelector('svg');
-    if (svg) {
-        svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-        svg.style.width = '100%';
-        svg.style.height = 'auto';
+        const containerWidth = DOM.staveContainer && typeof DOM.staveContainer.clientWidth === 'number' ? DOM.staveContainer.clientWidth : 0;
+        const innerWidth = containerWidth - 32;
+        const safeInnerWidth = Number.isFinite(innerWidth) ? innerWidth : 0;
+        const clampedWidth = Math.max(200, Math.min(safeInnerWidth > 0 ? safeInnerWidth : 600, 800));
+        const width = clampedWidth;
+        const height = 150;
+
+        // Validate VexFlow components before using them
+        if (!VF.Renderer || !VF.Renderer.Backends || !VF.Renderer.Backends.SVG) {
+            throw new Error('VexFlow Renderer or SVG backend not available');
+        }
+
+        const renderer = new VF.Renderer(container, VF.Renderer.Backends.SVG);
+        if (!renderer) {
+            throw new Error('Failed to create VexFlow renderer');
+        }
+
+        renderer.resize(width, height);
+        const context = renderer.getContext();
+        if (!context) {
+            throw new Error('Failed to get VexFlow context');
+        }
+
+        const stave = new VF.Stave(10, 0, width - 20);
+        if (!stave) {
+            throw new Error('Failed to create VexFlow stave');
+        }
+
+        // Add clef and time signature with error handling
+        try {
+            stave.addClef('treble').addTimeSignature('2/4');
+            stave.setContext(context).draw();
+        } catch (error) {
+            console.warn('Error adding clef/time signature:', error);
+            // Try without time signature
+            stave.addClef('treble');
+            stave.setContext(context).draw();
+        }
+
+        AppState.vexFlow = { renderer, context, stave, VF };
+
+        // Set up responsive SVG
+        const svg = container.querySelector('svg');
+        if (svg) {
+            svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+            svg.style.width = '100%';
+            svg.style.height = 'auto';
+            svg.style.maxWidth = '100%';
+        }
+
+        // Clean up existing event listeners to prevent memory leaks
+        if (AppState.vexFlow.resizeObserver) {
+            AppState.vexFlow.resizeObserver.disconnect();
+        }
+
+        // Set up resize handling
+        if (typeof ResizeObserver !== 'undefined') {
+            const ro = new ResizeObserver(() => {
+                try {
+                    handleResize();
+                } catch (error) {
+                    console.warn('Error in resize observer:', error);
+                }
+            });
+            ro.observe(DOM.staveContainer);
+            AppState.vexFlow.resizeObserver = ro;
+        }
+
+        // Add orientation change handler for mobile devices
+        const orientationHandler = () => {
+            setTimeout(() => {
+                try {
+                    handleResize();
+                } catch (error) {
+                    console.warn('Error in orientation change handler:', error);
+                }
+            }, 200);
+        };
+
+        window.removeEventListener('orientationchange', orientationHandler);
+        window.addEventListener('orientationchange', orientationHandler);
+
+    } catch (error) {
+        console.error('Error setting up VexFlow renderer:', error);
+        AppState.isVexFlowLoaded = false;
+        if (DOM.staveDisplayContainer) {
+            const safeMsg = (error && (error.message || String(error))) || 'Unknown setup error';
+            DOM.staveDisplayContainer.innerHTML = `<div class="p-4 text-center text-gray-800">
+                <p class="font-bold text-xl text-red-600">⚠️ Error d'Inicialització VexFlow</p>
+                <p class="text-sm mt-1">${safeMsg}</p>
+                <button onclick="IntervallyApp.recoverFromVexFlowError()" class="mt-3 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors">
+                    Intentar Recuperar
+                </button>
+                <p class="text-xs mt-2">O prova de recarregar la pàgina.</p>
+            </div>`;
+        }
+        throw error;
     }
-
-    // Reacciona a canvis de mida de contenidor
-    if (typeof ResizeObserver !== 'undefined') {
-        const ro = new ResizeObserver(() => handleResize());
-        ro.observe(DOM.staveContainer);
-        AppState.vexFlow.resizeObserver = ro;
-    }
-    window.addEventListener('orientationchange', () => setTimeout(handleResize, 200));
 }
 
 function drawInterval(note1VF, note2VF) {
@@ -310,16 +448,49 @@ function drawInterval(note1VF, note2VF) {
         return;
     }
 
-    const { context, stave, VF } = AppState.vexFlow;
-    if (typeof context.clear === 'function') {
-        context.clear();
-    } else if (DOM.staveDisplayContainer) {
-        // Esborra el contingut del contenidor SVG si el context no té clear()
-        while (DOM.staveDisplayContainer.firstChild) {
-            DOM.staveDisplayContainer.removeChild(DOM.staveDisplayContainer.firstChild);
+    // Re-initialize if context is corrupted
+    if (!AppState.vexFlow.context || !AppState.vexFlow.stave) {
+        try {
+            setupVexFlowRenderer(AppState.vexFlow.VF);
+        } catch (error) {
+            console.error("Failed to re-initialize VexFlow:", error);
+            container.innerHTML = `<div class="p-4 text-center text-gray-800"><p class="font-bold text-xl text-red-600">⚠️ Error de Reinicialització</p><p class="text-sm mt-1">Prova de recarregar la pàgina.</p></div>`;
+            return;
         }
     }
-    stave.draw();
+
+    const { context, stave, VF } = AppState.vexFlow;
+    
+    // Clear previous content more reliably
+    try {
+        // Clear the entire container and reinitialize
+        container.innerHTML = '';
+        
+        // Recreate renderer and stave for each draw to prevent state corruption
+        const containerWidth = DOM.staveContainer && typeof DOM.staveContainer.clientWidth === 'number' ? DOM.staveContainer.clientWidth : 0;
+        const innerWidth = containerWidth - 32;
+        const safeInnerWidth = Number.isFinite(innerWidth) ? innerWidth : 0;
+        const clampedWidth = Math.max(100, Math.min(safeInnerWidth > 0 ? safeInnerWidth : 600, 800));
+        const width = clampedWidth;
+        const height = 150;
+
+        const renderer = new VF.Renderer(container, VF.Renderer.Backends.SVG);
+        renderer.resize(width, height);
+        const newContext = renderer.getContext();
+        const newStave = new VF.Stave(10, 0, width - 20);
+        newStave.addClef('treble').addTimeSignature('2/4');
+        newStave.setContext(newContext).draw();
+        
+        // Update state with new instances
+        AppState.vexFlow.renderer = renderer;
+        AppState.vexFlow.context = newContext;
+        AppState.vexFlow.stave = newStave;
+        
+    } catch (error) {
+        console.error("Error clearing/reinitializing VexFlow context:", error);
+        container.innerHTML = `<div class="p-4 text-center text-gray-800"><p class="font-bold text-xl text-red-600">⚠️ Error de Context</p><p class="text-sm mt-1">Recarrega la pàgina si el problema persisteix.</p></div>`;
+        return;
+    }
 
     try {
         const notes = [
@@ -361,7 +532,14 @@ function drawInterval(note1VF, note2VF) {
     } catch (error) {
         console.error("Error drawing with VexFlow: ", error);
         const safeMsg = (error && (error.message || String(error))) || 'Unknown error';
-        container.innerHTML = `<div class="p-4 text-center text-gray-800"><p class="font-bold text-xl text-red-600">⚠️ Error de Visualització</p><p class="text-sm mt-1">${safeMsg}</p><p class="text-xs mt-1">Revisa la consola per a més detalls.</p></div>`;
+        container.innerHTML = `<div class="p-4 text-center text-gray-800">
+            <p class="font-bold text-xl text-red-600">⚠️ Error de Visualització</p>
+            <p class="text-sm mt-1">${safeMsg}</p>
+            <button onclick="IntervallyApp.recoverFromVexFlowError()" class="mt-3 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors">
+                Intentar Recuperar
+            </button>
+            <p class="text-xs mt-2">L'interval es pot validar sense la visualització.</p>
+        </div>`;
     }
 }
 
@@ -420,6 +598,13 @@ function startGame(difficultyKey) {
     nextInterval();
 }
 
+// Function to calculate interval from actual note spellings
+function calculateActualInterval(startSpell, endSpell) {
+    const startMidi = spelledToMidi(startSpell);
+    const endMidi = spelledToMidi(endSpell);
+    return Math.abs(endMidi - startMidi);
+}
+
 function generateInterval() {
     const config = DIFFICULTY_CONFIG[AppState.difficulty];
     const intervalSemitones = config.semitones[Math.floor(Math.random() * config.semitones.length)];
@@ -431,20 +616,24 @@ function generateInterval() {
     let endNoteMIDI;
 
     if (direction === 'descendente') {
-        const safeMinStart = PITCH_RANGE_MIDI_MIN + intervalSemitones;
+        // For descending intervals, start note must be high enough
+        const safeMinStart = MIN_NOTE_MIDI + intervalSemitones;
         const actualMin = Math.max(MIN_NOTE_MIDI, safeMinStart);
         const actualMax = MAX_NOTE_MIDI;
 
         if (AppState.difficulty === 'inicial') {
-            // Selecciona una nota inicial tal que tant l'inici com el final siguin naturals
+            // For initial difficulty, prefer natural notes
             const candidates = [];
             for (let m = actualMin; m <= actualMax; m++) {
                 const end = m - intervalSemitones;
-                if (isNaturalMidi(m) && isNaturalMidi(end)) candidates.push(m);
+                if (end >= MIN_NOTE_MIDI && end <= MAX_NOTE_MIDI && isNaturalMidi(m) && isNaturalMidi(end)) {
+                    candidates.push(m);
+                }
             }
             if (candidates.length > 0) {
                 startNoteMIDI = candidates[Math.floor(Math.random() * candidates.length)];
             } else {
+                // Fallback to any valid note in range
                 startNoteMIDI = Math.floor(Math.random() * (actualMax - actualMin + 1)) + actualMin;
             }
         } else {
@@ -452,7 +641,8 @@ function generateInterval() {
         }
         endNoteMIDI = startNoteMIDI - intervalSemitones;
     } else {
-        const safeMaxStart = PITCH_RANGE_MIDI_MAX - intervalSemitones;
+        // For ascending intervals, start note must be low enough
+        const safeMaxStart = MAX_NOTE_MIDI - intervalSemitones;
         const actualMin = MIN_NOTE_MIDI;
         const actualMax = Math.min(MAX_NOTE_MIDI, safeMaxStart);
 
@@ -460,17 +650,33 @@ function generateInterval() {
             const candidates = [];
             for (let m = actualMin; m <= actualMax; m++) {
                 const end = m + intervalSemitones;
-                if (isNaturalMidi(m) && isNaturalMidi(end)) candidates.push(m);
+                if (end >= MIN_NOTE_MIDI && end <= MAX_NOTE_MIDI && isNaturalMidi(m) && isNaturalMidi(end)) {
+                    candidates.push(m);
+                }
             }
             if (candidates.length > 0) {
                 startNoteMIDI = candidates[Math.floor(Math.random() * candidates.length)];
             } else {
+                // Fallback to any valid note in range
                 startNoteMIDI = Math.floor(Math.random() * (actualMax - actualMin + 1)) + actualMin;
             }
         } else {
             startNoteMIDI = Math.floor(Math.random() * (actualMax - actualMin + 1)) + actualMin;
         }
         endNoteMIDI = startNoteMIDI + intervalSemitones;
+    }
+
+    // Ensure both notes are within the A2-A4 range
+    if (endNoteMIDI < MIN_NOTE_MIDI || endNoteMIDI > MAX_NOTE_MIDI) {
+        console.warn(`Generated interval out of range. Start: ${startNoteMIDI}, End: ${endNoteMIDI}, adjusting...`);
+        // Retry with adjusted parameters
+        if (direction === 'descendente') {
+            startNoteMIDI = Math.min(MAX_NOTE_MIDI, MIN_NOTE_MIDI + intervalSemitones + Math.floor(Math.random() * 12));
+            endNoteMIDI = startNoteMIDI - intervalSemitones;
+        } else {
+            startNoteMIDI = Math.max(MIN_NOTE_MIDI, MAX_NOTE_MIDI - intervalSemitones - Math.floor(Math.random() * 12));
+            endNoteMIDI = startNoteMIDI + intervalSemitones;
+        }
     }
 
     AppState.startNoteMIDI = startNoteMIDI;
@@ -559,15 +765,22 @@ function checkAnswer() {
     AppState.totalAttempts++;
 
     const { currentIntervalSemitones, currentDirection, selectedInterval, selectedDirection } = AppState;
-    const { name: correctIntervalName } = getIntervalInfo(currentIntervalSemitones);
+    
+    // Use the actual interval from rendered notes if available
+    let actualIntervalSemitones = currentIntervalSemitones;
+    if (AppState.lastVFNotes && AppState.lastVFNotes.startSpell && AppState.lastVFNotes.endSpell) {
+        actualIntervalSemitones = calculateActualInterval(AppState.lastVFNotes.startSpell, AppState.lastVFNotes.endSpell);
+    }
+    
+    const { name: correctIntervalName } = getIntervalInfo(actualIntervalSemitones);
     const isDirectionChecked = DIFFICULTY_CONFIG[AppState.difficulty].directions.length > 1;
-    const isIntervalCorrect = selectedInterval === currentIntervalSemitones;
+    const isIntervalCorrect = selectedInterval === actualIntervalSemitones;
     const isDirectionCorrect = !isDirectionChecked || (selectedDirection === currentDirection);
     const isCorrect = isIntervalCorrect && isDirectionCorrect;
 
     updateScore(isCorrect);
     displayFeedback(isCorrect, correctIntervalName, isDirectionChecked, currentDirection);
-    highlightAnswers(isCorrect, selectedInterval, currentIntervalSemitones, selectedDirection, currentDirection, isDirectionChecked);
+    highlightAnswers(isCorrect, selectedInterval, actualIntervalSemitones, selectedDirection, currentDirection, isDirectionChecked);
     
     DOM.btnCheck.disabled = true;
     DOM.btnNext.disabled = false;
@@ -724,12 +937,57 @@ function setupDirectionButtons() {
 // 6. INICIALITZACIÓ
 // =========================================================================
 
+// Function to recover from VexFlow errors
+function recoverFromVexFlowError() {
+    console.log('Attempting to recover from VexFlow error...');
+    try {
+        AppState.isVexFlowLoaded = false;
+        if (AppState.vexFlow.resizeObserver) {
+            AppState.vexFlow.resizeObserver.disconnect();
+        }
+        AppState.vexFlow = { renderer: null, stave: null, context: null };
+        
+        // Try to reinitialize
+        const VF = getVexFlowNamespace();
+        if (VF) {
+            setupVexFlowRenderer(VF);
+            AppState.isVexFlowLoaded = true;
+            console.log('VexFlow recovery successful');
+            
+            // Redraw current interval if one exists
+            if (AppState.startNoteMIDI && AppState.currentIntervalSemitones !== null && AppState.currentDirection) {
+                const enforceNaturals = AppState.difficulty === 'inicial';
+                const { startVF, endVF } = getIntervalNoteRenderData(
+                    AppState.startNoteMIDI, 
+                    AppState.currentIntervalSemitones, 
+                    AppState.currentDirection, 
+                    enforceNaturals
+                );
+                drawInterval(startVF, endVF);
+            }
+            
+            return true;
+        }
+    } catch (error) {
+        console.error('VexFlow recovery failed:', error);
+        if (DOM.staveDisplayContainer) {
+            DOM.staveDisplayContainer.innerHTML = `<div class="p-4 text-center text-gray-800">
+                <p class="font-bold text-xl text-red-600">⚠️ No s'ha pogut recuperar</p>
+                <p class="text-sm mt-1">Prova de recarregar la pàgina completament.</p>
+                <p class="text-xs mt-2">L'interval es pot validar sense la visualització.</p>
+            </div>`;
+        }
+    }
+    return false;
+}
+
 const IntervallyApp = {
     startGame,
     nextInterval,
     checkAnswer,
     selectInterval,
-    selectDirection
+    selectDirection,
+    recoverFromVexFlowError
 };
 
 function init() {
